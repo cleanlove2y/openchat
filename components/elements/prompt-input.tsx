@@ -5,7 +5,7 @@ import { Loader2Icon, SendIcon, SquareIcon, XIcon } from "lucide-react";
 import type {
   ComponentProps,
   HTMLAttributes,
-  KeyboardEventHandler,
+  KeyboardEvent,
 } from "react";
 import { Children } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { handlePromptInputKeyDown } from "./prompt-input-keydown";
 
 export type PromptInputProps = HTMLAttributes<HTMLFormElement>;
 
@@ -40,6 +41,7 @@ export type PromptInputTextareaProps = ComponentProps<typeof Textarea> & {
 
 export const PromptInputTextarea = ({
   onChange,
+  onKeyDown,
   className,
   placeholder = "What would you like to know?",
   minHeight = 48,
@@ -48,28 +50,8 @@ export const PromptInputTextarea = ({
   resizeOnNewLinesOnly = false,
   ...props
 }: PromptInputTextareaProps) => {
-  const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-    if (e.key === "Enter") {
-      if (e.nativeEvent.isComposing) {
-        return;
-      }
-
-      if (e.shiftKey) {
-        return;
-      }
-
-      e.preventDefault();
-
-      const form = e.currentTarget.form;
-      const submitButton = form?.querySelector(
-        'button[type="submit"]'
-      ) as HTMLButtonElement | null;
-      if (submitButton?.disabled) {
-        return;
-      }
-
-      form?.requestSubmit();
-    }
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    handlePromptInputKeyDown(e, onKeyDown);
   };
 
   return (

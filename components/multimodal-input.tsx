@@ -3,7 +3,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, XIcon, WrenchIcon } from "lucide-react";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -32,8 +32,10 @@ import {
   DEFAULT_CHAT_MODEL,
   modelsByProvider,
 } from "@/lib/ai/models";
-import type { Attachment, ChatMessage } from "@/lib/types";
+import { Attachment, ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useSlashCommand, type SlashCommandItem } from "@/hooks/use-slash-command";
+import { SlashCommandMenu } from "./slash-command-menu";
 import {
   PromptInput,
   PromptInputSubmit,
@@ -49,6 +51,7 @@ import type { VisibilityType } from "./visibility-selector";
 
 function setCookie(name: string, value: string) {
   const maxAge = 60 * 60 * 24 * 365; // 1 year
+  // eslint-disable-next-line unicorn/no-document-cookie
   // biome-ignore lint/suspicious/noDocumentCookie: needed for client-side cookie setting
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}`;
 }
@@ -137,8 +140,32 @@ function PureMultimodalInput({
     setLocalStorageInput(input);
   }, [input, setLocalStorageInput]);
 
+  const slashCommand = useSlashCommand();
+  const [selectedSlashCommands, setSelectedSlashCommands] = useState<SlashCommandItem[]>([]);
+
+  const handleCommandSelect = useCallback((cmd: SlashCommandItem) => {
+    setSelectedSlashCommands((prev) => {
+      if (!prev.find((c) => c.id === cmd.id)) {
+        return [...prev, cmd];
+      }
+      return prev;
+    });
+  }, []);
+
   const handleInput = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(event.target.value);
+    slashCommand.handleChange(event);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashCommand.isOpen) {
+      slashCommand.handleKeyDown(event, input, setInput, handleCommandSelect);
+      
+      // Prevent default Enter behavior if it's handled by slash command
+      if (event.key === "Enter" && slashCommand.filteredCommands.length > 0) {
+        event.preventDefault();
+      }
+    }
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -146,6 +173,10 @@ function PureMultimodalInput({
 
   const submitForm = useCallback(() => {
     window.history.pushState({}, "", `/chat/${chatId}`);
+
+    const commandPrefix = selectedSlashCommands.length > 0
+      ? selectedSlashCommands.map((c) => `[Use Skill: ${c.id}]`).join("\n") + "\n\n"
+      : "";
 
     sendMessage({
       role: "user",
@@ -158,12 +189,13 @@ function PureMultimodalInput({
         })),
         {
           type: "text",
-          text: input,
+          text: commandPrefix + input,
         },
       ],
     });
 
     setAttachments([]);
+    setSelectedSlashCommands([]);
     setLocalStorageInput("");
     resetHeight();
     setInput("");
@@ -181,6 +213,7 @@ function PureMultimodalInput({
     width,
     chatId,
     resetHeight,
+    selectedSlashCommands,
   ]);
 
   const uploadFile = useCallback(async (file: File) => {
@@ -317,10 +350,10 @@ function PureMultimodalInput({
       />
 
       <PromptInput
-        className="rounded-xl border border-border bg-background p-3 shadow-xs transition-all duration-200 focus-within:border-border hover:border-muted-foreground/50"
+        className="overflow-visible rounded-xl border border-border bg-background p-3 shadow-xs transition-all duration-200 focus-within:border-border hover:border-muted-foreground/50"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!input.trim() && attachments.length === 0) {
+          if (!input.trim() && attachments.length === 0 && selectedSlashCommands.length === 0) {
             return;
           }
           if (status !== "ready") {
@@ -330,11 +363,28 @@ function PureMultimodalInput({
           }
         }}
       >
-        {(attachments.length > 0 || uploadQueue.length > 0) && (
+        {(attachments.length > 0 || uploadQueue.length > 0 || selectedSlashCommands.length > 0) && (
           <div
             className="flex flex-row items-end gap-2 overflow-x-scroll"
             data-testid="attachments-preview"
           >
+            {selectedSlashCommands.map((cmd) => (
+              <div
+                key={cmd.id}
+                className="flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg px-2.5 py-1.5 text-sm shrink-0 whitespace-nowrap"
+              >
+                <WrenchIcon className="size-4" />
+                <span className="font-medium">@{cmd.id}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSlashCommands((s) => s.filter((x) => x.id !== cmd.id))}
+                  className="text-primary/70 hover:text-primary transition-colors"
+                >
+                  <XIcon className="size-4" />
+                </button>
+              </div>
+            ))}
+
             {attachments.map((attachment) => (
               <PreviewAttachment
                 attachment={attachment}
@@ -363,7 +413,16 @@ function PureMultimodalInput({
             ))}
           </div>
         )}
-        <div className="flex flex-row items-start gap-1 sm:gap-2">
+        <div className="flex flex-row items-start gap-1 sm:gap-2 relative">
+          <SlashCommandMenu
+            isOpen={slashCommand.isOpen}
+            filteredCommands={slashCommand.filteredCommands}
+            selectedIndex={slashCommand.selectedIndex}
+            isLoading={slashCommand.isLoading}
+            onSelect={(cmd) => slashCommand.handleSelectCommand(cmd, input, setInput, handleCommandSelect)}
+            onHover={slashCommand.setSelectedIndex}
+            onClose={slashCommand.closeMenu}
+          />
           <PromptInputTextarea
             className="grow resize-none border-0! border-none! bg-transparent p-2 text-base outline-none ring-0 [-ms-overflow-style:none] [scrollbar-width:none] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-scrollbar]:hidden"
             data-testid="multimodal-input"
@@ -371,6 +430,7 @@ function PureMultimodalInput({
             maxHeight={200}
             minHeight={44}
             onChange={handleInput}
+            onKeyDown={handleKeyDown}
             placeholder="Send a message..."
             ref={textareaRef}
             rows={1}
@@ -396,7 +456,7 @@ function PureMultimodalInput({
             <PromptInputSubmit
               className="size-8 rounded-full bg-primary text-primary-foreground transition-colors duration-200 hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
               data-testid="send-button"
-              disabled={!input.trim() || uploadQueue.length > 0}
+              disabled={(!input.trim() && selectedSlashCommands.length === 0) || uploadQueue.length > 0}
               status={status}
             >
               <ArrowUpIcon size={14} />

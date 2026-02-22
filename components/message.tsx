@@ -4,6 +4,13 @@ import { useState } from "react";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
 import { cn, sanitizeText } from "@/lib/utils";
+import { WrenchIcon } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useDataStream } from "./data-stream-provider";
 import { DocumentToolResult } from "./document";
 import { DocumentPreview } from "./document-preview";
@@ -124,24 +131,58 @@ const PurePreviewMessage = ({
 
             if (type === "text") {
               if (mode === "view") {
+                let textContent = sanitizeText(part.text);
+                const skills: string[] = [];
+
+                if (message.role === "user") {
+                  const skillRegex = /\[Use Skill: ([^\]]+)\]/g;
+                  let match;
+                  while ((match = skillRegex.exec(textContent)) !== null) {
+                    skills.push(match[1]);
+                  }
+                  // Remove the tags and any leading newlines they left behind
+                  textContent = textContent.replace(/\[Use Skill: [^\]]+\]/g, "").replace(/^\n+/, "");
+                }
+
                 return (
-                  <div key={key}>
-                    <MessageContent
-                      className={cn({
-                        "wrap-break-word w-fit rounded-2xl px-3 py-2 text-right text-white":
-                          message.role === "user",
-                        "bg-transparent px-0 py-0 text-left":
-                          message.role === "assistant",
-                      })}
-                      data-testid="message-content"
-                      style={
-                        message.role === "user"
-                          ? { backgroundColor: "#006cff" }
-                          : undefined
-                      }
-                    >
-                      <Response>{sanitizeText(part.text)}</Response>
-                    </MessageContent>
+                  <div key={key} className={cn("flex flex-col gap-2", { "items-end": message.role === "user" })}>
+                    {message.role === "user" && skills.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                        {skills.map((skill, i) => (
+                          <TooltipProvider key={i}>
+                            <Tooltip delayDuration={0}>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center justify-center size-[34px] bg-primary/10 text-primary border border-primary/20 rounded-xl shrink-0">
+                                  <WrenchIcon className="size-4" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={8}>
+                                Used Skill: @{skill}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {(textContent.trim() || skills.length === 0) && (
+                      <MessageContent
+                        className={cn({
+                          "wrap-break-word w-fit rounded-2xl px-3 py-2 text-right text-white":
+                            message.role === "user",
+                          "bg-transparent px-0 py-0 text-left":
+                            message.role === "assistant",
+                        })}
+                        data-testid="message-content"
+                        style={
+                          message.role === "user"
+                            ? { backgroundColor: "#006cff" }
+                            : undefined
+                        }
+                      >
+                        <Response>{textContent}</Response>
+                      </MessageContent>
+                    )}
                   </div>
                 );
               }
