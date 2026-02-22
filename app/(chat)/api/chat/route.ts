@@ -6,11 +6,20 @@ import {
   generateId,
   stepCountIs,
   streamText,
+  tool,
 } from "ai";
 import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
+import { z } from "zod";
 import { auth, type UserType } from "@/app/(auth)/auth";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import {
+  buildSkillsSystemPrompt,
+  getSkillsConfig,
+  getSkillsSnapshot,
+  loadSkillByName,
+  shouldEnableSkillTooling,
+} from "@/lib/ai/skills";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
 import { createDocument } from "@/lib/ai/tools/create-document";
@@ -135,23 +144,92 @@ export async function POST(request: Request) {
       selectedChatModel.includes("thinking");
 
     const modelMessages = await convertToModelMessages(uiMessages);
+    const skillsConfig = getSkillsConfig();
+    const skillsSnapshot = await getSkillsSnapshot(skillsConfig).catch((error) => {
+      console.error("[skills] snapshot load failed (fail-open)", error);
+      return {
+        skills: [],
+        loadedAt: Date.now(),
+        sourceStats: {
+          workspace: { discovered: 0, loaded: 0, skipped: 0 },
+          user: { discovered: 0, loaded: 0, skipped: 0 },
+          bundled: { discovered: 0, loaded: 0, skipped: 0 },
+        },
+        errors: [],
+      };
+    });
+    const skillToolingEnabled = shouldEnableSkillTooling(
+      skillsConfig.enabled,
+      skillsSnapshot.skills.length,
+      isReasoningModel
+    );
+    const skillsSystemPrompt = skillToolingEnabled
+      ? buildSkillsSystemPrompt(skillsSnapshot.skills)
+      : "";
+    const baseSystemPrompt = systemPrompt({ selectedChatModel, requestHints });
+    const effectiveSystemPrompt = skillsSystemPrompt
+      ? `${baseSystemPrompt}\n\n${skillsSystemPrompt}`
+      : baseSystemPrompt;
+
+    const loadSkillTool =
+      !skillToolingEnabled
+        ? undefined
+        : tool({
+            description:
+              "Load a skill by name and return its full instructions",
+            inputSchema: z.object({
+              name: z.string().describe("Skill name to load"),
+            }),
+            execute: async ({ name }) => {
+              const loadedSkill = await loadSkillByName(
+                skillsSnapshot.skills,
+                name,
+                skillsConfig
+              );
+
+              if (!loadedSkill) {
+                return {
+                  error: `Skill '${name}' not found`,
+                  availableSkills: skillsSnapshot.skills.map(
+                    (skill) => skill.name
+                  ),
+                };
+              }
+
+              return loadedSkill;
+            },
+          });
+
+    const activeTools: Array<
+      | "getWeather"
+      | "createDocument"
+      | "updateDocument"
+      | "requestSuggestions"
+      | "loadSkill"
+    > = [];
+
+    if (!isReasoningModel) {
+      activeTools.push(
+        "getWeather",
+        "createDocument",
+        "updateDocument",
+        "requestSuggestions"
+      );
+
+      if (loadSkillTool) {
+        activeTools.push("loadSkill");
+      }
+    }
 
     const stream = createUIMessageStream({
       originalMessages: isToolApprovalFlow ? uiMessages : undefined,
       execute: async ({ writer: dataStream }) => {
         const result = streamText({
           model: getLanguageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, requestHints }),
+          system: effectiveSystemPrompt,
           messages: modelMessages,
           stopWhen: stepCountIs(5),
-          experimental_activeTools: isReasoningModel
-            ? []
-            : [
-                "getWeather",
-                "createDocument",
-                "updateDocument",
-                "requestSuggestions",
-              ],
+          experimental_activeTools: activeTools,
           providerOptions: isReasoningModel
             ? {
                 anthropic: {
@@ -164,6 +242,7 @@ export async function POST(request: Request) {
             createDocument: createDocument({ session, dataStream }),
             updateDocument: updateDocument({ session, dataStream }),
             requestSuggestions: requestSuggestions({ session, dataStream }),
+            ...(loadSkillTool ? { loadSkill: loadSkillTool } : {}),
           },
           experimental_telemetry: {
             isEnabled: isProductionEnvironment,

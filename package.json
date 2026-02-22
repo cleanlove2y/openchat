@@ -15,7 +15,10 @@
     "db:pull": "drizzle-kit pull",
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
-    "test": "export PLAYWRIGHT=True && pnpm exec playwright test"
+    "test": "export PLAYWRIGHT=True && pnpm exec playwright test",
+    "test:skills:unit": "pnpm exec tsx --test lib/ai/skills.test.ts",
+    "test:skills:api": "pnpm exec tsx scripts/skills-api-regression.ts",
+    "test:skills:regression": "pnpm exec tsx --test tests/regression/skills-api.test.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.15",
@@ -97,6 +100,7 @@
     "tailwindcss-animate": "^1.0.7",
     "use-stick-to-bottom": "^1.1.1",
     "usehooks-ts": "^3.1.0",
+    "yaml": "^2.8.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -111,6 +115,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "baseline-browser-mapping": "^2.10.0",
     "drizzle-kit": "^0.25.0",
     "postcss": "^8",
     "tailwindcss": "^4.1.13",
