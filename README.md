@@ -72,17 +72,18 @@ Your app template should now be running on [localhost:3000](http://localhost:300
 
 ## Logs
 
-This project now writes structured JSON logs to a fixed directory:
+This project writes structured JSON logs to daily partitioned files:
 
-- `logs/app.log`: request lifecycle and operational diagnostics
-- `logs/audit.log`: audit events for auth and mutating operations
+- `logs/app/YYYY-MM-DD.log`: request lifecycle and operational diagnostics
+- `logs/audit/YYYY-MM-DD.log`: audit events for auth and mutating operations
 
 You can configure paths and level with:
 
 - `LOG_DIR` (default: `./logs`)
-- `APP_LOG_FILE` (default: `app.log`)
-- `AUDIT_LOG_FILE` (default: `audit.log`)
+- `LOG_RETENTION_DAYS` (default: `30`)
 - `LOG_LEVEL` (default: `info`)
+
+Legacy compatibility variables (deprecated): `APP_LOG_FILE`, `AUDIT_LOG_FILE`.
 
 For richer HTTP diagnostics (similar to detailed backend logs), you can enable:
 

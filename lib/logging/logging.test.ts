@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -11,6 +11,27 @@ import {
   setRequestActor,
   withRouteLogging,
 } from "./index";
+
+function getLocalDateKey(date = new Date()): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateKeyDaysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return getLocalDateKey(date);
+}
+
+function appLogPath(logDir: string, dateKey = getLocalDateKey()): string {
+  return join(logDir, "app", `${dateKey}.log`);
+}
+
+function auditLogPath(logDir: string, dateKey = getLocalDateKey()): string {
+  return join(logDir, "audit", `${dateKey}.log`);
+}
 
 async function readJsonLines(path: string): Promise<Record<string, unknown>[]> {
   const raw = await readFile(path, "utf8");
@@ -46,7 +67,7 @@ test("withRouteLogging writes app logs and attaches x-request-id", async () => {
 
     await flushLoggersForTests();
 
-    const lines = await readJsonLines(join(logDir, "app.log"));
+    const lines = await readJsonLines(appLogPath(logDir));
 
     assert.equal(
       lines.some((line) => line.event === "http.request.start"),
@@ -93,7 +114,7 @@ test("withRouteLogging writes success audit logs for mutating endpoints", async 
     assert.equal(response.status, 200);
     await flushLoggersForTests();
 
-    const lines = await readJsonLines(join(logDir, "audit.log"));
+    const lines = await readJsonLines(auditLogPath(logDir));
     const entry = lines.find(
       (line) =>
         line.event === "audit.event" &&
@@ -135,7 +156,7 @@ test("withRouteLogging writes failed audit logs for rejected requests", async ()
     assert.equal(response.status, 403);
     await flushLoggersForTests();
 
-    const lines = await readJsonLines(join(logDir, "audit.log"));
+    const lines = await readJsonLines(auditLogPath(logDir));
     const entry = lines.find(
       (line) =>
         line.event === "audit.event" && line.action === "document.delete"
@@ -182,7 +203,7 @@ test("withRouteLogging can log request/response bodies when enabled", async () =
     assert.equal(response.status, 200);
     await flushLoggersForTests();
 
-    const lines = await readJsonLines(join(logDir, "app.log"));
+    const lines = await readJsonLines(appLogPath(logDir));
     const start = lines.find((line) => line.event === "http.request.start");
     const complete = lines.find((line) => line.event === "http.request.complete");
 
@@ -229,6 +250,45 @@ test("withRouteLogging does not fail when log directory cannot be created", asyn
   }
 });
 
+test("withRouteLogging does not fail when logger rotates mid-request", async () => {
+  const firstLogDir = await mkdtemp(join(tmpdir(), "openchat-rotate-old-"));
+  const secondLogDir = await mkdtemp(join(tmpdir(), "openchat-rotate-new-"));
+  configureLoggingForTests({ logDir: firstLogDir });
+
+  let releaseHandler: (() => void) | null = null;
+  const handlerReady = new Promise<void>((resolve) => {
+    releaseHandler = resolve;
+  });
+
+  try {
+    const handler = withRouteLogging(
+      {
+        route: "/api/rotate-mid-request",
+        method: "GET",
+      },
+      async () => {
+        await handlerReady;
+        return Response.json({ ok: true }, { status: 200 });
+      }
+    );
+
+    const responsePromise = handler(
+      new Request("http://localhost/api/rotate-mid-request", { method: "GET" })
+    );
+
+    configureLoggingForTests({ logDir: secondLogDir });
+    releaseHandler?.();
+
+    const response = await responsePromise;
+    assert.equal(response.status, 200);
+    await flushLoggersForTests();
+  } finally {
+    releaseHandler?.();
+    await rm(firstLogDir, { recursive: true, force: true });
+    await rm(secondLogDir, { recursive: true, force: true });
+  }
+});
+
 test("withRouteLogging treats NEXT_REDIRECT as a successful audit event", async () => {
   const logDir = await mkdtemp(join(tmpdir(), "openchat-audit-redirect-"));
   configureLoggingForTests({ logDir });
@@ -262,13 +322,13 @@ test("withRouteLogging treats NEXT_REDIRECT as a successful audit event", async 
 
     await flushLoggersForTests();
 
-    const appLines = await readJsonLines(join(logDir, "app.log"));
+    const appLines = await readJsonLines(appLogPath(logDir));
     assert.equal(
       appLines.some((line) => line.event === "http.request.error"),
       false
     );
 
-    const auditLines = await readJsonLines(join(logDir, "audit.log"));
+    const auditLines = await readJsonLines(auditLogPath(logDir));
     const entry = auditLines.find(
       (line) =>
         line.event === "audit.event" && line.action === "auth.guest.sign_in"
@@ -318,7 +378,7 @@ test("createAuthedApiRoute preserves audit fields in audit logger", async () => 
     assert.equal(response.status, 204);
     await flushLoggersForTests();
 
-    const lines = await readJsonLines(join(logDir, "audit.log"));
+    const lines = await readJsonLines(auditLogPath(logDir));
     const entry = lines.find(
       (line) => line.event === "audit.event" && line.action === "vote.update"
     );
@@ -331,6 +391,145 @@ test("createAuthedApiRoute preserves audit fields in audit logger", async () => 
     assert.equal(entry.actorId, "user-3");
     assert.equal(entry.outcome, "success");
     assert.equal(entry.statusCode, 204);
+  } finally {
+    await rm(logDir, { recursive: true, force: true });
+  }
+});
+
+test("creates daily partitioned app and audit logs", async () => {
+  const logDir = await mkdtemp(join(tmpdir(), "openchat-daily-layout-"));
+  configureLoggingForTests({ logDir });
+
+  try {
+    const handler = withRouteLogging(
+      {
+        route: "/api/layout",
+        method: "PATCH",
+        audit: {
+          action: "layout.check",
+          resourceType: "layout",
+        },
+      },
+      async () => Response.json({ ok: true }, { status: 200 })
+    );
+
+    const response = await handler(
+      new Request("http://localhost/api/layout", { method: "PATCH" })
+    );
+    assert.equal(response.status, 200);
+
+    await flushLoggersForTests();
+
+    const appEntries = await readdir(join(logDir, "app"));
+    const auditEntries = await readdir(join(logDir, "audit"));
+    const today = `${getLocalDateKey()}.log`;
+
+    assert.equal(appEntries.includes(today), true);
+    assert.equal(auditEntries.includes(today), true);
+  } finally {
+    await rm(logDir, { recursive: true, force: true });
+  }
+});
+
+test("deletes files older than retention window", async () => {
+  const logDir = await mkdtemp(join(tmpdir(), "openchat-retention-delete-"));
+  const oldKey = dateKeyDaysAgo(45);
+  const recentKey = dateKeyDaysAgo(5);
+
+  await mkdir(join(logDir, "app"), { recursive: true });
+  await mkdir(join(logDir, "audit"), { recursive: true });
+  await writeFile(appLogPath(logDir, oldKey), '{"old":true}\n');
+  await writeFile(auditLogPath(logDir, oldKey), '{"old":true}\n');
+  await writeFile(appLogPath(logDir, recentKey), '{"recent":true}\n');
+  await writeFile(auditLogPath(logDir, recentKey), '{"recent":true}\n');
+
+  configureLoggingForTests({ logDir, logRetentionDays: 30 });
+
+  try {
+    const handler = withRouteLogging(
+      {
+        route: "/api/retention/delete",
+        method: "GET",
+      },
+      async () => Response.json({ ok: true }, { status: 200 })
+    );
+
+    const response = await handler(
+      new Request("http://localhost/api/retention/delete", { method: "GET" })
+    );
+    assert.equal(response.status, 200);
+    await flushLoggersForTests();
+
+    const appEntries = await readdir(join(logDir, "app"));
+    const auditEntries = await readdir(join(logDir, "audit"));
+    assert.equal(appEntries.includes(`${oldKey}.log`), false);
+    assert.equal(auditEntries.includes(`${oldKey}.log`), false);
+    assert.equal(appEntries.includes(`${recentKey}.log`), true);
+    assert.equal(auditEntries.includes(`${recentKey}.log`), true);
+  } finally {
+    await rm(logDir, { recursive: true, force: true });
+  }
+});
+
+test("keeps files within retention window", async () => {
+  const logDir = await mkdtemp(join(tmpdir(), "openchat-retention-keep-"));
+  const nearBoundaryKey = dateKeyDaysAgo(29);
+
+  await mkdir(join(logDir, "app"), { recursive: true });
+  await mkdir(join(logDir, "audit"), { recursive: true });
+  await writeFile(appLogPath(logDir, nearBoundaryKey), '{"keep":true}\n');
+  await writeFile(auditLogPath(logDir, nearBoundaryKey), '{"keep":true}\n');
+
+  configureLoggingForTests({ logDir, logRetentionDays: 30 });
+
+  try {
+    const handler = withRouteLogging(
+      {
+        route: "/api/retention/keep",
+        method: "GET",
+      },
+      async () => Response.json({ ok: true }, { status: 200 })
+    );
+
+    const response = await handler(
+      new Request("http://localhost/api/retention/keep", { method: "GET" })
+    );
+    assert.equal(response.status, 200);
+    await flushLoggersForTests();
+
+    const appEntries = await readdir(join(logDir, "app"));
+    const auditEntries = await readdir(join(logDir, "audit"));
+    assert.equal(appEntries.includes(`${nearBoundaryKey}.log`), true);
+    assert.equal(auditEntries.includes(`${nearBoundaryKey}.log`), true);
+  } finally {
+    await rm(logDir, { recursive: true, force: true });
+  }
+});
+
+test("does not break when cleanup fails", async () => {
+  const logDir = await mkdtemp(join(tmpdir(), "openchat-retention-failopen-"));
+  const oldKey = dateKeyDaysAgo(60);
+
+  await mkdir(join(logDir, "app", `${oldKey}.log`), { recursive: true });
+  await mkdir(join(logDir, "audit"), { recursive: true });
+  await writeFile(auditLogPath(logDir, oldKey), '{"old":true}\n');
+
+  configureLoggingForTests({ logDir, logRetentionDays: 30 });
+
+  try {
+    const handler = withRouteLogging(
+      {
+        route: "/api/retention/fail-open",
+        method: "GET",
+      },
+      async () => Response.json({ ok: true }, { status: 200 })
+    );
+
+    const response = await handler(
+      new Request("http://localhost/api/retention/fail-open", { method: "GET" })
+    );
+    assert.equal(response.status, 200);
+    await flushLoggersForTests();
   } finally {
     await rm(logDir, { recursive: true, force: true });
   }

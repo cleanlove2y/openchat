@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import pino, { type Logger } from "pino";
 
@@ -60,6 +60,7 @@ type LoggingConfig = {
   logDir: string;
   appLogFile: string;
   auditLogFile: string;
+  logRetentionDays: number;
   level: string;
   syncDestination: boolean;
   logHttpHeaders: boolean;
@@ -73,6 +74,9 @@ type LoggerState = {
   auditLogger: Logger;
   appDestination: pino.DestinationStream;
   auditDestination: pino.DestinationStream;
+  dateKey: string;
+  logDir: string;
+  logRetentionDays: number;
 };
 
 const requestContextStorage = new AsyncLocalStorage<RequestContext>();
@@ -89,6 +93,10 @@ function getConfig(): LoggingConfig {
     process.env.LOG_HTTP_MAX_BODY_BYTES ?? "",
     10
   );
+  const retentionDaysFromEnv = Number.parseInt(
+    process.env.LOG_RETENTION_DAYS ?? "",
+    10
+  );
   const rawLogDir = configOverride.logDir ?? process.env.LOG_DIR ?? "logs";
   const logDir = isAbsolute(rawLogDir)
     ? rawLogDir
@@ -100,6 +108,11 @@ function getConfig(): LoggingConfig {
       configOverride.appLogFile ?? process.env.APP_LOG_FILE ?? "app.log",
     auditLogFile:
       configOverride.auditLogFile ?? process.env.AUDIT_LOG_FILE ?? "audit.log",
+    logRetentionDays:
+      configOverride.logRetentionDays ??
+      (Number.isInteger(retentionDaysFromEnv) && retentionDaysFromEnv > 0
+        ? retentionDaysFromEnv
+        : 30),
     level: configOverride.level ?? process.env.LOG_LEVEL ?? "info",
     syncDestination:
       configOverride.syncDestination ?? process.env.LOG_SYNC === "true",
@@ -121,6 +134,86 @@ function getConfig(): LoggingConfig {
         ? maxBodyFromEnv
         : 4096),
   };
+}
+
+function getLocalDateKey(date = new Date()): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getLocalDateKeyDaysAgo(daysAgo: number, now = new Date()): string {
+  const candidate = new Date(now);
+  candidate.setDate(candidate.getDate() - daysAgo);
+  return getLocalDateKey(candidate);
+}
+
+function resolveDailyLogPath(
+  logDir: string,
+  channel: "app" | "audit",
+  dateKey: string
+): string {
+  return join(logDir, channel, `${dateKey}.log`);
+}
+
+function isDailyLogFileName(fileName: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}\.log$/.test(fileName);
+}
+
+function cleanupExpiredDailyLogs(
+  logDir: string,
+  retentionDays: number,
+  now = new Date()
+): {
+  deletedCount: number;
+  failedCount: number;
+  lastError?: unknown;
+} {
+  if (retentionDays <= 0) {
+    return { deletedCount: 0, failedCount: 0 };
+  }
+
+  const cutoffDateKey = getLocalDateKeyDaysAgo(retentionDays - 1, now);
+  let deletedCount = 0;
+  let failedCount = 0;
+  let lastError: unknown;
+
+  for (const channel of ["app", "audit"] as const) {
+    const channelDir = join(logDir, channel);
+    let entries: string[] = [];
+
+    try {
+      entries = readdirSync(channelDir);
+    } catch (error) {
+      const errorWithCode = error as { code?: string };
+      if (errorWithCode.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+
+    for (const entry of entries) {
+      if (!isDailyLogFileName(entry)) {
+        continue;
+      }
+
+      const fileDateKey = entry.slice(0, 10);
+      if (fileDateKey >= cutoffDateKey) {
+        continue;
+      }
+
+      try {
+        unlinkSync(join(channelDir, entry));
+        deletedCount += 1;
+      } catch (error) {
+        failedCount += 1;
+        lastError = error;
+      }
+    }
+  }
+
+  return { deletedCount, failedCount, lastError };
 }
 
 function createDestination(
@@ -161,25 +254,35 @@ function resetLoggers(): void {
 }
 
 function getLoggerState(): LoggerState {
-  if (loggerState) {
+  const config = getConfig();
+  const now = new Date();
+  const dateKey = getLocalDateKey(now);
+
+  if (
+    loggerState &&
+    loggerState.dateKey === dateKey &&
+    loggerState.logDir === config.logDir &&
+    loggerState.logRetentionDays === config.logRetentionDays
+  ) {
     return loggerState;
   }
 
-  const config = getConfig();
+  if (loggerState) {
+    resetLoggers();
+  }
+
   let appDestination: pino.DestinationStream | null = null;
   let auditDestination: pino.DestinationStream | null = null;
   let destinationError: unknown;
+  const appLogPath = resolveDailyLogPath(config.logDir, "app", dateKey);
+  const auditLogPath = resolveDailyLogPath(config.logDir, "audit", dateKey);
 
   try {
     mkdirSync(config.logDir, { recursive: true });
-    appDestination = createDestination(
-      join(config.logDir, config.appLogFile),
-      config.syncDestination
-    );
-    auditDestination = createDestination(
-      join(config.logDir, config.auditLogFile),
-      config.syncDestination
-    );
+    mkdirSync(join(config.logDir, "app"), { recursive: true });
+    mkdirSync(join(config.logDir, "audit"), { recursive: true });
+    appDestination = createDestination(appLogPath, config.syncDestination);
+    auditDestination = createDestination(auditLogPath, config.syncDestination);
   } catch (error) {
     destinationError = error;
 
@@ -231,18 +334,67 @@ function getLoggerState(): LoggerState {
     auditLogger,
     appDestination,
     auditDestination,
+    dateKey,
+    logDir: config.logDir,
+    logRetentionDays: config.logRetentionDays,
   };
 
   if (destinationError) {
     loggerState.appLogger.warn(
       {
         event: "logger.destination.fallback",
+        dateKey,
         logDir: config.logDir,
+        appLogPath,
+        auditLogPath,
         appLogFile: config.appLogFile,
         auditLogFile: config.auditLogFile,
         error: normalizeError(destinationError),
       },
       "logger destination fallback to stdout"
+    );
+    return loggerState;
+  }
+
+  try {
+    const cleanupResult = cleanupExpiredDailyLogs(
+      config.logDir,
+      config.logRetentionDays,
+      now
+    );
+
+    if (cleanupResult.failedCount > 0) {
+      loggerState.appLogger.warn(
+        {
+          event: "logger.retention.cleanup_failed",
+          logDir: config.logDir,
+          retentionDays: config.logRetentionDays,
+          failedCount: cleanupResult.failedCount,
+          deletedCount: cleanupResult.deletedCount,
+          error: normalizeError(cleanupResult.lastError),
+        },
+        "logger retention cleanup failed for some files"
+      );
+    } else if (cleanupResult.deletedCount > 0) {
+      loggerState.appLogger.info(
+        {
+          event: "logger.retention.cleanup",
+          logDir: config.logDir,
+          retentionDays: config.logRetentionDays,
+          deletedCount: cleanupResult.deletedCount,
+        },
+        "logger retention cleanup completed"
+      );
+    }
+  } catch (error) {
+    loggerState.appLogger.warn(
+      {
+        event: "logger.retention.cleanup_error",
+        logDir: config.logDir,
+        retentionDays: config.logRetentionDays,
+        error: normalizeError(error),
+      },
+      "logger retention cleanup failed"
     );
   }
 
@@ -753,7 +905,6 @@ export function withRouteLogging<TArgs extends unknown[]>(
     const requestId = request.headers.get("x-request-id") ?? randomUUID();
     const ip = requestIp(request);
     const userAgent = request.headers.get("user-agent");
-    const appLogger = getAppLogger();
 
     const requestForAudit = options.audit ? request.clone() : request;
     const requestForDetails = config.logHttpRequestBody ? request.clone() : null;
@@ -773,7 +924,7 @@ export function withRouteLogging<TArgs extends unknown[]>(
           config
         );
 
-        appLogger.info(
+        getAppLogger().info(
           {
             event: "http.request.start",
             requestId,
@@ -792,7 +943,7 @@ export function withRouteLogging<TArgs extends unknown[]>(
           const durationMs = Date.now() - startedAt;
           const responseDetails = await getResponseLogDetails(response, config);
 
-          appLogger.info(
+          getAppLogger().info(
             {
               event: "http.request.complete",
               requestId,
@@ -826,7 +977,7 @@ export function withRouteLogging<TArgs extends unknown[]>(
           if (isRedirectControlFlow(error)) {
             const statusCode = getRedirectStatusCode(error) ?? 303;
 
-            appLogger.info(
+            getAppLogger().info(
               {
                 event: "http.request.redirect",
                 requestId,
@@ -860,7 +1011,7 @@ export function withRouteLogging<TArgs extends unknown[]>(
 
           const normalized = normalizeError(error);
 
-          appLogger.error(
+          getAppLogger().error(
             {
               event: "http.request.error",
               requestId,
