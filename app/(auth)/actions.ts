@@ -3,6 +3,7 @@
 import { z } from "zod";
 
 import { createUser, getUser } from "@/lib/db/queries";
+import { hashForLog, writeAuditLog } from "@/lib/logging";
 
 import { signIn } from "./auth";
 
@@ -34,6 +35,13 @@ export const login = async (
     return { status: "success" };
   } catch (error) {
     if (error instanceof z.ZodError) {
+      writeAuditLog({
+        action: "auth.login",
+        resourceType: "session",
+        outcome: "failure",
+        statusCode: 400,
+        reason: "invalid_data",
+      });
       return { status: "invalid_data" };
     }
 
@@ -60,12 +68,24 @@ export const register = async (
       email: formData.get("email"),
       password: formData.get("password"),
     });
+    const emailHash = hashForLog(validatedData.email.toLowerCase());
 
     const [user] = await getUser(validatedData.email);
 
     if (user) {
+      writeAuditLog({
+        action: "auth.register",
+        resourceType: "user",
+        outcome: "failure",
+        statusCode: 409,
+        reason: "user_exists",
+        metadata: {
+          emailHash,
+        },
+      });
       return { status: "user_exists" } as RegisterActionState;
     }
+
     await createUser(validatedData.email, validatedData.password);
     await signIn("credentials", {
       email: validatedData.email,
@@ -73,11 +93,36 @@ export const register = async (
       redirect: false,
     });
 
+    writeAuditLog({
+      action: "auth.register",
+      resourceType: "user",
+      outcome: "success",
+      statusCode: 201,
+      metadata: {
+        emailHash,
+      },
+    });
+
     return { status: "success" };
   } catch (error) {
     if (error instanceof z.ZodError) {
+      writeAuditLog({
+        action: "auth.register",
+        resourceType: "user",
+        outcome: "failure",
+        statusCode: 400,
+        reason: "invalid_data",
+      });
       return { status: "invalid_data" };
     }
+
+    writeAuditLog({
+      action: "auth.register",
+      resourceType: "user",
+      outcome: "failure",
+      statusCode: 500,
+      reason: "register_failed",
+    });
 
     return { status: "failed" };
   }

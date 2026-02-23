@@ -17,6 +17,7 @@ import postgres from "postgres";
 import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { OpenChatError } from "../errors";
+import { getAppLogger } from "../logging";
 import { generateUUID } from "../utils";
 import {
   type Chat,
@@ -40,6 +41,7 @@ import { generateHashedPassword } from "./utils";
 // biome-ignore lint: Forbidden non-null assertion.
 const client = postgres(process.env.POSTGRES_URL!);
 const db = drizzle(client);
+const appLogger = getAppLogger();
 
 export async function getUser(email: string): Promise<User[]> {
   try {
@@ -525,7 +527,14 @@ export async function updateChatTitleById({
   try {
     return await db.update(chat).set({ title }).where(eq(chat.id, chatId));
   } catch (error) {
-    console.warn("Failed to update title for chat", chatId, error);
+    appLogger.warn(
+      {
+        event: "db.chat_title.update_failed",
+        chatId,
+        error,
+      },
+      "Failed to update title for chat"
+    );
     return;
   }
 }

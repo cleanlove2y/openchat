@@ -2,6 +2,7 @@
 
 import { generateText, type UIMessage } from "ai";
 import { cookies } from "next/headers";
+import { auth } from "@/app/(auth)/auth";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { titlePrompt } from "@/lib/ai/prompts";
 import { getTitleModel } from "@/lib/ai/providers";
@@ -10,6 +11,7 @@ import {
   getMessageById,
   updateChatVisibilityById,
 } from "@/lib/db/queries";
+import { writeAuditLog } from "@/lib/logging";
 import { getTextFromMessage } from "@/lib/utils";
 
 export async function saveChatModelAsCookie(model: string) {
@@ -34,12 +36,43 @@ export async function generateTitleFromUserMessage({
 }
 
 export async function deleteTrailingMessages({ id }: { id: string }) {
-  const [message] = await getMessageById({ id });
+  const session = await auth();
 
-  await deleteMessagesByChatIdAfterTimestamp({
-    chatId: message.chatId,
-    timestamp: message.createdAt,
-  });
+  try {
+    const [message] = await getMessageById({ id });
+
+    await deleteMessagesByChatIdAfterTimestamp({
+      chatId: message.chatId,
+      timestamp: message.createdAt,
+    });
+
+    writeAuditLog({
+      action: "chat.delete_trailing_messages",
+      resourceType: "chat",
+      resourceId: message.chatId,
+      outcome: "success",
+      actorId: session?.user?.id,
+      actorType: session?.user?.type,
+      metadata: {
+        fromMessageId: id,
+      },
+    });
+  } catch (error) {
+    writeAuditLog({
+      action: "chat.delete_trailing_messages",
+      resourceType: "chat",
+      outcome: "failure",
+      statusCode: 500,
+      reason: error instanceof Error ? error.message : "unknown_error",
+      actorId: session?.user?.id,
+      actorType: session?.user?.type,
+      metadata: {
+        fromMessageId: id,
+      },
+    });
+
+    throw error;
+  }
 }
 
 export async function updateChatVisibility({
@@ -49,5 +82,37 @@ export async function updateChatVisibility({
   chatId: string;
   visibility: VisibilityType;
 }) {
-  await updateChatVisibilityById({ chatId, visibility });
+  const session = await auth();
+
+  try {
+    await updateChatVisibilityById({ chatId, visibility });
+
+    writeAuditLog({
+      action: "chat.update_visibility",
+      resourceType: "chat",
+      resourceId: chatId,
+      outcome: "success",
+      actorId: session?.user?.id,
+      actorType: session?.user?.type,
+      metadata: {
+        visibility,
+      },
+    });
+  } catch (error) {
+    writeAuditLog({
+      action: "chat.update_visibility",
+      resourceType: "chat",
+      resourceId: chatId,
+      outcome: "failure",
+      statusCode: 500,
+      reason: error instanceof Error ? error.message : "unknown_error",
+      actorId: session?.user?.id,
+      actorType: session?.user?.type,
+      metadata: {
+        visibility,
+      },
+    });
+
+    throw error;
+  }
 }

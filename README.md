@@ -69,3 +69,24 @@ pnpm dev
 ```
 
 Your app template should now be running on [localhost:3000](http://localhost:3000).
+
+## Logs
+
+This project now writes structured JSON logs to a fixed directory:
+
+- `logs/app.log`: request lifecycle and operational diagnostics
+- `logs/audit.log`: audit events for auth and mutating operations
+
+You can configure paths and level with:
+
+- `LOG_DIR` (default: `./logs`)
+- `APP_LOG_FILE` (default: `app.log`)
+- `AUDIT_LOG_FILE` (default: `audit.log`)
+- `LOG_LEVEL` (default: `info`)
+
+For richer HTTP diagnostics (similar to detailed backend logs), you can enable:
+
+- `LOG_HTTP_HEADERS` (default: `true`)
+- `LOG_HTTP_REQUEST_BODY` (default: `true` in development, `false` in production)
+- `LOG_HTTP_RESPONSE_BODY` (default: `true` in development, `false` in production)
+- `LOG_HTTP_MAX_BODY_BYTES` (default: `4096`)

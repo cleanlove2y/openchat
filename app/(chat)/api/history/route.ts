@@ -1,27 +1,25 @@
-import type { NextRequest } from "next/server";
-import { auth } from "@/app/(auth)/auth";
+import {
+  type AuthenticatedSession,
+  createAuthedApiRoute,
+} from "@/app/(chat)/api/_shared/authed-route";
 import { deleteAllChatsByUserId, getChatsByUserId } from "@/lib/db/queries";
 import { OpenChatError } from "@/lib/errors";
+import { z } from "zod";
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
+const historyInputSchema = z.object({
+  limit: z.number().int().positive(),
+  startingAfter: z.string().nullable(),
+  endingBefore: z.string().nullable(),
+});
 
-  const limit = Number.parseInt(searchParams.get("limit") || "10", 10);
-  const startingAfter = searchParams.get("starting_after");
-  const endingBefore = searchParams.get("ending_before");
-
-  if (startingAfter && endingBefore) {
-    return new OpenChatError(
-      "bad_request:api",
-      "Only one of starting_after or ending_before can be provided."
-    ).toResponse();
-  }
-
-  const session = await auth();
-
-  if (!session?.user) {
-    return new OpenChatError("unauthorized:chat").toResponse();
-  }
+const getHandler = async ({
+  session,
+  input,
+}: {
+  session: AuthenticatedSession;
+  input: z.infer<typeof historyInputSchema>;
+}) => {
+  const { limit, startingAfter, endingBefore } = input;
 
   const chats = await getChatsByUserId({
     id: session.user.id,
@@ -31,16 +29,51 @@ export async function GET(request: NextRequest) {
   });
 
   return Response.json(chats);
-}
+};
 
-export async function DELETE() {
-  const session = await auth();
-
-  if (!session?.user) {
-    return new OpenChatError("unauthorized:chat").toResponse();
-  }
+const deleteHandler = async (session: AuthenticatedSession) => {
 
   const result = await deleteAllChatsByUserId({ userId: session.user.id });
 
   return Response.json(result, { status: 200 });
-}
+};
+
+export const GET = createAuthedApiRoute<z.infer<typeof historyInputSchema>>({
+    route: "/api/history",
+    method: "GET",
+    unauthorizedErrorCode: "unauthorized:chat",
+    badRequestErrorCode: "bad_request:api",
+    parseRequest: async (request) => {
+      const searchParams = new URL(request.url).searchParams;
+      const limitRaw = searchParams.get("limit") || "10";
+      const parsedLimit = Number.parseInt(limitRaw, 10);
+      const limit = Number.isNaN(parsedLimit) ? 10 : parsedLimit;
+      const startingAfter = searchParams.get("starting_after");
+      const endingBefore = searchParams.get("ending_before");
+
+      if (startingAfter && endingBefore) {
+        throw new OpenChatError(
+          "bad_request:api",
+          "Only one of starting_after or ending_before can be provided."
+        );
+      }
+
+      return historyInputSchema.parse({
+        limit,
+        startingAfter,
+        endingBefore,
+      });
+    },
+    handler: getHandler,
+  });
+
+export const DELETE = createAuthedApiRoute({
+    route: "/api/history",
+    method: "DELETE",
+    unauthorizedErrorCode: "unauthorized:chat",
+    audit: {
+      action: "chat.delete_all",
+      resourceType: "chat_collection",
+    },
+    handler: ({ session }) => deleteHandler(session),
+  });

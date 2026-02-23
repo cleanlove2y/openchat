@@ -4,6 +4,7 @@ import type { DefaultJWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import { DUMMY_PASSWORD } from "@/lib/constants";
 import { createGuestUser, getUser } from "@/lib/db/queries";
+import { hashForLog, writeAuditLog } from "@/lib/logging";
 import { authConfig } from "./auth.config";
 
 export type UserType = "guest" | "regular";
@@ -41,10 +42,23 @@ export const {
     Credentials({
       credentials: {},
       async authorize({ email, password }: any) {
+        const emailHash =
+          typeof email === "string" ? hashForLog(email.toLowerCase()) : null;
         const users = await getUser(email);
 
         if (users.length === 0) {
           await compare(password, DUMMY_PASSWORD);
+          writeAuditLog({
+            action: "auth.login",
+            resourceType: "session",
+            outcome: "failure",
+            statusCode: 401,
+            reason: "user_not_found",
+            metadata: {
+              provider: "credentials",
+              emailHash,
+            },
+          });
           return null;
         }
 
@@ -52,14 +66,49 @@ export const {
 
         if (!user.password) {
           await compare(password, DUMMY_PASSWORD);
+          writeAuditLog({
+            action: "auth.login",
+            resourceType: "session",
+            outcome: "failure",
+            statusCode: 401,
+            reason: "password_not_set",
+            metadata: {
+              provider: "credentials",
+              emailHash,
+            },
+          });
           return null;
         }
 
         const passwordsMatch = await compare(password, user.password);
 
         if (!passwordsMatch) {
+          writeAuditLog({
+            action: "auth.login",
+            resourceType: "session",
+            outcome: "failure",
+            statusCode: 401,
+            reason: "password_mismatch",
+            metadata: {
+              provider: "credentials",
+              emailHash,
+            },
+          });
           return null;
         }
+
+        writeAuditLog({
+          action: "auth.login",
+          resourceType: "session",
+          outcome: "success",
+          statusCode: 200,
+          actorId: user.id,
+          actorType: "regular",
+          metadata: {
+            provider: "credentials",
+            emailHash,
+          },
+        });
 
         return { ...user, type: "regular" };
       },
@@ -69,6 +118,15 @@ export const {
       credentials: {},
       async authorize() {
         const [guestUser] = await createGuestUser();
+        writeAuditLog({
+          action: "auth.guest_create",
+          resourceType: "user",
+          resourceId: guestUser.id,
+          outcome: "success",
+          statusCode: 201,
+          actorId: guestUser.id,
+          actorType: "guest",
+        });
         return { ...guestUser, type: "guest" };
       },
     }),

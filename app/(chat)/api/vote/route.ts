@@ -1,23 +1,29 @@
-import { auth } from "@/app/(auth)/auth";
+import {
+  type AuthenticatedSession,
+  createAuthedApiRoute,
+} from "@/app/(chat)/api/_shared/authed-route";
 import { getChatById, getVotesByChatId, voteMessage } from "@/lib/db/queries";
 import { OpenChatError } from "@/lib/errors";
+import { z } from "zod";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const chatId = searchParams.get("chatId");
+const voteGetQuerySchema = z.object({
+  chatId: z.string().min(1),
+});
 
-  if (!chatId) {
-    return new OpenChatError(
-      "bad_request:api",
-      "Parameter chatId is required."
-    ).toResponse();
-  }
+const votePatchInputSchema = z.object({
+  chatId: z.string().min(1),
+  messageId: z.string().min(1),
+  type: z.enum(["up", "down"]),
+});
 
-  const session = await auth();
-
-  if (!session?.user) {
-    return new OpenChatError("unauthorized:vote").toResponse();
-  }
+const getHandler = async ({
+  session,
+  input,
+}: {
+  session: AuthenticatedSession;
+  input: z.infer<typeof voteGetQuerySchema>;
+}) => {
+  const { chatId } = input;
 
   const chat = await getChatById({ id: chatId });
 
@@ -32,28 +38,16 @@ export async function GET(request: Request) {
   const votes = await getVotesByChatId({ id: chatId });
 
   return Response.json(votes, { status: 200 });
-}
+};
 
-export async function PATCH(request: Request) {
-  const {
-    chatId,
-    messageId,
-    type,
-  }: { chatId: string; messageId: string; type: "up" | "down" } =
-    await request.json();
-
-  if (!chatId || !messageId || !type) {
-    return new OpenChatError(
-      "bad_request:api",
-      "Parameters chatId, messageId, and type are required."
-    ).toResponse();
-  }
-
-  const session = await auth();
-
-  if (!session?.user) {
-    return new OpenChatError("unauthorized:vote").toResponse();
-  }
+const patchHandler = async ({
+  session,
+  input,
+}: {
+  session: AuthenticatedSession;
+  input: z.infer<typeof votePatchInputSchema>;
+}) => {
+  const { chatId, messageId, type } = input;
 
   const chat = await getChatById({ id: chatId });
 
@@ -72,4 +66,50 @@ export async function PATCH(request: Request) {
   });
 
   return new Response("Message voted", { status: 200 });
-}
+};
+
+export const GET = createAuthedApiRoute<z.infer<typeof voteGetQuerySchema>>({
+    route: "/api/vote",
+    method: "GET",
+    unauthorizedErrorCode: "unauthorized:vote",
+    badRequestErrorCode: "bad_request:api",
+    parseRequest: async (request) => {
+      const searchParams = new URL(request.url).searchParams;
+      return voteGetQuerySchema.parse({
+        chatId: searchParams.get("chatId"),
+      });
+    },
+    handler: getHandler,
+  });
+
+export const PATCH = createAuthedApiRoute<z.infer<typeof votePatchInputSchema>>({
+    route: "/api/vote",
+    method: "PATCH",
+    unauthorizedErrorCode: "unauthorized:vote",
+    badRequestErrorCode: "bad_request:api",
+    parseRequest: async (request) =>
+      votePatchInputSchema.parse(await request.json()),
+    audit: {
+      action: "vote.update",
+      resourceType: "vote",
+      getMetadata: async (requestForAudit) => {
+        try {
+          const body = (await requestForAudit.json()) as {
+            chatId?: unknown;
+            messageId?: unknown;
+            type?: unknown;
+          };
+
+          return {
+            chatId: typeof body.chatId === "string" ? body.chatId : null,
+            messageId:
+              typeof body.messageId === "string" ? body.messageId : null,
+            voteType: typeof body.type === "string" ? body.type : null,
+          };
+        } catch (_) {
+          return undefined;
+        }
+      },
+    },
+    handler: patchHandler,
+  });

@@ -1,12 +1,22 @@
 import Form from "next/form";
 
-import { signOut } from "@/app/(auth)/auth";
+import { auth, signOut } from "@/app/(auth)/auth";
+import { writeAuditLog } from "@/lib/logging";
 
 export const SignOutForm = () => {
   return (
     <Form
       action={async () => {
         "use server";
+
+        const session = await auth();
+        writeAuditLog({
+          action: "auth.logout",
+          resourceType: "session",
+          outcome: "success",
+          actorId: session?.user?.id,
+          actorType: session?.user?.type,
+        });
 
         await signOut({
           redirectTo: "/",

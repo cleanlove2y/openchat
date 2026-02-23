@@ -1,23 +1,23 @@
-import { auth } from "@/app/(auth)/auth";
+import {
+  type AuthenticatedSession,
+  createAuthedApiRoute,
+} from "@/app/(chat)/api/_shared/authed-route";
 import { getSuggestionsByDocumentId } from "@/lib/db/queries";
 import { OpenChatError } from "@/lib/errors";
+import { z } from "zod";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const documentId = searchParams.get("documentId");
+const suggestionsQuerySchema = z.object({
+  documentId: z.string().min(1),
+});
 
-  if (!documentId) {
-    return new OpenChatError(
-      "bad_request:api",
-      "Parameter documentId is required."
-    ).toResponse();
-  }
-
-  const session = await auth();
-
-  if (!session?.user) {
-    return new OpenChatError("unauthorized:suggestions").toResponse();
-  }
+const getHandler = async ({
+  session,
+  input,
+}: {
+  session: AuthenticatedSession;
+  input: z.infer<typeof suggestionsQuerySchema>;
+}) => {
+  const { documentId } = input;
 
   const suggestions = await getSuggestionsByDocumentId({
     documentId,
@@ -34,4 +34,20 @@ export async function GET(request: Request) {
   }
 
   return Response.json(suggestions, { status: 200 });
-}
+};
+
+export const GET = createAuthedApiRoute<
+  z.infer<typeof suggestionsQuerySchema>
+>({
+    route: "/api/suggestions",
+    method: "GET",
+    unauthorizedErrorCode: "unauthorized:suggestions",
+    badRequestErrorCode: "bad_request:api",
+    parseRequest: async (request) => {
+      const searchParams = new URL(request.url).searchParams;
+      return suggestionsQuerySchema.parse({
+        documentId: searchParams.get("documentId"),
+      });
+    },
+    handler: getHandler,
+  });

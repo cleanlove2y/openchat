@@ -1,4 +1,5 @@
 import type { SkillLoadError, SkillsSnapshot } from "./types";
+import { getAppLogger } from "@/lib/logging";
 
 type SkillsMetricName =
   | "skills_discovered_total"
@@ -21,7 +22,13 @@ export function logSkillsEvent(event: string, payload: Record<string, unknown>):
   };
 
   // Structured logs for observability and alerting pipelines.
-  console.info(JSON.stringify(line));
+  getAppLogger().info(
+    {
+      event: "skills.telemetry",
+      payload: line,
+    },
+    "skills.telemetry"
+  );
 }
 
 export function recordSkillsSnapshot(snapshot: SkillsSnapshot, durationMs: number): void {

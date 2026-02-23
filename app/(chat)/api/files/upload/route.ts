@@ -2,7 +2,12 @@ import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/app/(auth)/auth";
+import { createAuthedApiRoute } from "@/app/(chat)/api/_shared/authed-route";
+
+function getBlobFilename(file: Blob): string | null {
+  const maybeName = (file as { name?: unknown }).name;
+  return typeof maybeName === "string" ? maybeName : null;
+}
 
 // Use Blob instead of File since File is not available in Node.js environment
 const FileSchema = z.object({
@@ -17,24 +22,24 @@ const FileSchema = z.object({
     }),
 });
 
-export async function POST(request: Request) {
-  const session = await auth();
-
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+const postHandler = async ({
+  request,
+}: {
+  request: Request;
+}) => {
   if (request.body === null) {
     return new Response("Request body is empty", { status: 400 });
   }
 
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as Blob;
+    const fileField = formData.get("file");
 
-    if (!file) {
+    if (!(fileField instanceof Blob)) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
+
+    const file = fileField;
 
     const validatedFile = FileSchema.safeParse({ file });
 
@@ -46,8 +51,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: errorMessage }, { status: 400 });
     }
 
-    // Get filename from formData since Blob doesn't have name property
-    const filename = (formData.get("file") as File).name;
+    const filename = getBlobFilename(file) ?? "upload.bin";
     const fileBuffer = await file.arrayBuffer();
 
     try {
@@ -65,4 +69,44 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+};
+
+export const POST = createAuthedApiRoute({
+    route: "/api/files/upload",
+    method: "POST",
+    unauthorizedResponse: async () =>
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    audit: {
+      action: "file.upload",
+      resourceType: "blob",
+      getMetadata: async (requestForAudit) => {
+        try {
+          const formData = await requestForAudit.formData();
+          const file = formData.get("file");
+
+          if (!(file instanceof Blob)) {
+            return {
+              filePresent: false,
+            };
+          }
+
+          const filename = getBlobFilename(file);
+
+          return {
+            filePresent: true,
+            filename:
+              typeof filename === "string"
+                ? {
+                    length: filename.length,
+                  }
+                : null,
+            size: file.size,
+            mediaType: file.type,
+          };
+        } catch (_) {
+          return undefined;
+        }
+      },
+    },
+    handler: postHandler,
+  });

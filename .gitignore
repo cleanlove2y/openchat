@@ -43,6 +43,8 @@ yarn-error.log*
 /blob-report/
 /playwright/*
 
+# app logs
+/logs/
 
 /agent-skills/*
 !/agent-skills/README.md

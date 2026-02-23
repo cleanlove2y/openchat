@@ -1,28 +1,30 @@
-import { auth } from "@/app/(auth)/auth";
-import type { ArtifactKind } from "@/components/artifact";
 import {
   deleteDocumentsByIdAfterTimestamp,
   getDocumentsById,
   saveDocument,
 } from "@/lib/db/queries";
 import { OpenChatError } from "@/lib/errors";
+import {
+  type AuthenticatedSession,
+  createAuthedApiRoute,
+} from "@/app/(chat)/api/_shared/authed-route";
+import {
+  type DocumentDeleteInput,
+  type DocumentIdQueryInput,
+  type DocumentPostInput,
+  parseDocumentDeleteRequest,
+  parseDocumentIdRequest,
+  parseDocumentPostRequest,
+} from "./request-parsing";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-
-  if (!id) {
-    return new OpenChatError(
-      "bad_request:api",
-      "Parameter id is missing"
-    ).toResponse();
-  }
-
-  const session = await auth();
-
-  if (!session?.user) {
-    return new OpenChatError("unauthorized:document").toResponse();
-  }
+const getHandler = async ({
+  session,
+  input,
+}: {
+  session: AuthenticatedSession;
+  input: DocumentIdQueryInput;
+}) => {
+  const { id } = input;
 
   const documents = await getDocumentsById({ id });
 
@@ -37,31 +39,16 @@ export async function GET(request: Request) {
   }
 
   return Response.json(documents, { status: 200 });
-}
+};
 
-export async function POST(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-
-  if (!id) {
-    return new OpenChatError(
-      "bad_request:api",
-      "Parameter id is required."
-    ).toResponse();
-  }
-
-  const session = await auth();
-
-  if (!session?.user) {
-    return new OpenChatError("not_found:document").toResponse();
-  }
-
-  const {
-    content,
-    title,
-    kind,
-  }: { content: string; title: string; kind: ArtifactKind } =
-    await request.json();
+const postHandler = async ({
+  session,
+  input,
+}: {
+  session: AuthenticatedSession;
+  input: DocumentPostInput;
+}) => {
+  const { id, content, title, kind } = input;
 
   const documents = await getDocumentsById({ id });
 
@@ -82,32 +69,16 @@ export async function POST(request: Request) {
   });
 
   return Response.json(document, { status: 200 });
-}
+};
 
-export async function DELETE(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  const timestamp = searchParams.get("timestamp");
-
-  if (!id) {
-    return new OpenChatError(
-      "bad_request:api",
-      "Parameter id is required."
-    ).toResponse();
-  }
-
-  if (!timestamp) {
-    return new OpenChatError(
-      "bad_request:api",
-      "Parameter timestamp is required."
-    ).toResponse();
-  }
-
-  const session = await auth();
-
-  if (!session?.user) {
-    return new OpenChatError("unauthorized:document").toResponse();
-  }
+const deleteHandler = async ({
+  session,
+  input,
+}: {
+  session: AuthenticatedSession;
+  input: DocumentDeleteInput;
+}) => {
+  const { id, timestamp } = input;
 
   const documents = await getDocumentsById({ id });
 
@@ -123,4 +94,67 @@ export async function DELETE(request: Request) {
   });
 
   return Response.json(documentsDeleted, { status: 200 });
-}
+};
+
+export const GET = createAuthedApiRoute<DocumentIdQueryInput>({
+    route: "/api/document",
+    method: "GET",
+    unauthorizedErrorCode: "unauthorized:document",
+    badRequestErrorCode: "bad_request:api",
+    parseRequest: parseDocumentIdRequest,
+    handler: getHandler,
+  });
+
+export const POST = createAuthedApiRoute<DocumentPostInput>({
+    route: "/api/document",
+    method: "POST",
+    unauthorizedErrorCode: "not_found:document",
+    badRequestErrorCode: "bad_request:api",
+    parseRequest: parseDocumentPostRequest,
+    audit: {
+      action: "document.save",
+      resourceType: "document",
+      getResourceId: (requestForAudit) =>
+        new URL(requestForAudit.url).searchParams.get("id") ?? undefined,
+      getMetadata: async (requestForAudit) => {
+        try {
+          const body = (await requestForAudit.json()) as {
+            kind?: unknown;
+            title?: unknown;
+          };
+
+          return {
+            kind: typeof body.kind === "string" ? body.kind : null,
+            title:
+              typeof body.title === "string"
+                ? { length: body.title.length }
+                : null,
+          };
+        } catch (_) {
+          return undefined;
+        }
+      },
+    },
+    handler: postHandler,
+  });
+
+export const DELETE = createAuthedApiRoute<DocumentDeleteInput>({
+    route: "/api/document",
+    method: "DELETE",
+    unauthorizedErrorCode: "unauthorized:document",
+    badRequestErrorCode: "bad_request:api",
+    parseRequest: parseDocumentDeleteRequest,
+    audit: {
+      action: "document.delete_after",
+      resourceType: "document",
+      getResourceId: (requestForAudit) =>
+        new URL(requestForAudit.url).searchParams.get("id") ?? undefined,
+      getMetadata: (requestForAudit) => {
+        const searchParams = new URL(requestForAudit.url).searchParams;
+        return {
+          timestamp: searchParams.get("timestamp"),
+        };
+      },
+    },
+    handler: deleteHandler,
+  });
