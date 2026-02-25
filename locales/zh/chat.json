@@ -1,0 +1,23 @@
+{
+  "header.newChat": "新建对话",
+  "header.deployWithVercel": "在 Vercel 上部署",
+  "visibility.private.label": "私有",
+  "visibility.private.description": "仅你可以访问此对话",
+  "visibility.public.label": "公开",
+  "visibility.public.description": "任何拥有链接的人都可以访问此对话",
+  "greeting.hello": "你好！",
+  "greeting.question": "今天我可以帮你做什么？",
+  "suggested.advantages": "使用 Next.js 有哪些优势？",
+  "suggested.dijkstra": "写一段代码演示迪杰斯特拉算法",
+  "suggested.essay": "帮我写一篇关于硅谷的文章",
+  "suggested.weather": "旧金山现在的天气怎么样？",
+  "gateway.title": "激活 AI Gateway",
+  "gateway.descriptionOwner": "此应用需要所有者先激活 Vercel AI Gateway。",
+  "gateway.descriptionYou": "此应用需要你先激活 Vercel AI Gateway。",
+  "gateway.activate": "立即激活",
+  "input.placeholder": "发送消息...",
+  "input.waitModel": "请等待模型完成当前回复！",
+  "upload.failed": "文件上传失败，请重试！",
+  "upload.failedPasted": "粘贴图片上传失败",
+  "model.searchPlaceholder": "搜索模型..."
+}

@@ -1,0 +1,12 @@
+{
+  "action.cancel": "取消",
+  "action.close": "关闭",
+  "locale.en": "英文",
+  "locale.short.en": "EN",
+  "locale.short.zh": "中",
+  "locale.switchTo": "切换到{{locale}}",
+  "locale.zh": "中文",
+  "status.loading": "加载中...",
+  "theme.dark": "深色",
+  "theme.light": "浅色"
+}

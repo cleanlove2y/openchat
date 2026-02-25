@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { User } from "next-auth";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +22,8 @@ import {
   SidebarMenu,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useAppTranslation } from "@/lib/i18n/hooks";
+import { localizePathFromPathname } from "@/lib/i18n/navigation";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +38,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export function AppSidebar({ user }: { user: User | undefined }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const { t } = useAppTranslation(["sidebar", "common"]);
   const { setOpenMobile } = useSidebar();
   const { mutate } = useSWRConfig();
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
@@ -46,15 +50,15 @@ export function AppSidebar({ user }: { user: User | undefined }) {
     });
 
     toast.promise(deletePromise, {
-      loading: "Deleting all chats...",
+      loading: t("toast.deleteAllLoading"),
       success: () => {
         mutate(unstable_serialize(getChatHistoryPaginationKey));
         setShowDeleteAllDialog(false);
-        router.replace("/");
+        router.replace(localizePathFromPathname(pathname, "/"));
         router.refresh();
-        return "All chats deleted successfully";
+        return t("toast.deleteAllSuccess");
       },
-      error: "Failed to delete all chats",
+      error: t("toast.deleteAllError"),
     });
   };
 
@@ -66,7 +70,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
             <div className="flex flex-row items-center justify-between">
               <Link
                 className="flex flex-row items-center gap-3"
-                href="/"
+                href={localizePathFromPathname(pathname, "/")}
                 onClick={() => {
                   setOpenMobile(false);
                 }}
@@ -75,7 +79,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                   OpenChat
                 </span>
               </Link>
-              <div className="flex flex-row gap-1">
+              <div className="flex flex-row items-center gap-1">
                 {user && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -89,7 +93,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent align="end" className="hidden md:block">
-                      Delete All Chats
+                      {t("tooltip.deleteAllChats")}
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -99,7 +103,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                       className="h-8 p-1 md:h-fit md:p-2"
                       onClick={() => {
                         setOpenMobile(false);
-                        router.push("/");
+                        router.push(localizePathFromPathname(pathname, "/"));
                         router.refresh();
                       }}
                       type="button"
@@ -109,7 +113,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent align="end" className="hidden md:block">
-                    New Chat
+                    {t("tooltip.newChat")}
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -128,16 +132,15 @@ export function AppSidebar({ user }: { user: User | undefined }) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete all chats?</AlertDialogTitle>
+            <AlertDialogTitle>{t("dialog.deleteAllTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete all
-              your chats and remove them from our servers.
+              {t("dialog.deleteAllDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:action.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteAll}>
-              Delete All
+              {t("dialog.deleteAllConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

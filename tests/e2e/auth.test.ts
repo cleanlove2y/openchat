@@ -20,12 +20,12 @@ test.describe("Authentication Pages", () => {
   test("can navigate from login to register", async ({ page }) => {
     await page.goto("/login");
     await page.getByRole("link", { name: "Sign up" }).click();
-    await expect(page).toHaveURL("/register");
+    await expect(page).toHaveURL(/\/(zh|en)\/register$/);
   });
 
   test("can navigate from register to login", async ({ page }) => {
     await page.goto("/register");
     await page.getByRole("link", { name: "Sign in" }).click();
-    await expect(page).toHaveURL("/login");
+    await expect(page).toHaveURL(/\/(zh|en)\/login$/);
   });
 });

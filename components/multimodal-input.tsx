@@ -3,7 +3,8 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import { CheckIcon, XIcon, WrenchIcon } from "lucide-react";
+import { CheckIcon, WrenchIcon, XIcon } from "lucide-react";
+import { usePathname } from "next/navigation";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -28,14 +29,18 @@ import {
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
 import {
+  type SlashCommandItem,
+  useSlashCommand,
+} from "@/hooks/use-slash-command";
+import {
   chatModels,
   DEFAULT_CHAT_MODEL,
   modelsByProvider,
 } from "@/lib/ai/models";
-import { Attachment, ChatMessage } from "@/lib/types";
+import { useAppTranslation } from "@/lib/i18n/hooks";
+import { localizePathFromPathname } from "@/lib/i18n/navigation";
+import type { Attachment, ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useSlashCommand, type SlashCommandItem } from "@/hooks/use-slash-command";
-import { SlashCommandMenu } from "./slash-command-menu";
 import {
   PromptInput,
   PromptInputSubmit,
@@ -45,6 +50,7 @@ import {
 } from "./elements/prompt-input";
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from "./icons";
 import { PreviewAttachment } from "./preview-attachment";
+import { SlashCommandMenu } from "./slash-command-menu";
 import { SuggestedActions } from "./suggested-actions";
 import { Button } from "./ui/button";
 import type { VisibilityType } from "./visibility-selector";
@@ -87,6 +93,8 @@ function PureMultimodalInput({
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
 }) {
+  const pathname = usePathname();
+  const { t } = useAppTranslation("chat");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
 
@@ -141,7 +149,9 @@ function PureMultimodalInput({
   }, [input, setLocalStorageInput]);
 
   const slashCommand = useSlashCommand();
-  const [selectedSlashCommands, setSelectedSlashCommands] = useState<SlashCommandItem[]>([]);
+  const [selectedSlashCommands, setSelectedSlashCommands] = useState<
+    SlashCommandItem[]
+  >([]);
 
   const handleCommandSelect = useCallback((cmd: SlashCommandItem) => {
     setSelectedSlashCommands((prev) => {
@@ -160,7 +170,7 @@ function PureMultimodalInput({
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (slashCommand.isOpen) {
       slashCommand.handleKeyDown(event, input, setInput, handleCommandSelect);
-      
+
       // Prevent default Enter behavior if it's handled by slash command
       if (event.key === "Enter" && slashCommand.filteredCommands.length > 0) {
         event.preventDefault();
@@ -172,11 +182,16 @@ function PureMultimodalInput({
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
 
   const submitForm = useCallback(() => {
-    window.history.pushState({}, "", `/chat/${chatId}`);
+    window.history.pushState(
+      null,
+      "",
+      localizePathFromPathname(pathname, `/chat/${chatId}`)
+    );
 
-    const commandPrefix = selectedSlashCommands.length > 0
-      ? selectedSlashCommands.map((c) => `[Use Skill: ${c.id}]`).join("\n") + "\n\n"
-      : "";
+    const commandPrefix =
+      selectedSlashCommands.length > 0
+        ? `${selectedSlashCommands.map((c) => `[Use Skill: ${c.id}]`).join("\n")}\n\n`
+        : "";
 
     sendMessage({
       role: "user",
@@ -214,34 +229,38 @@ function PureMultimodalInput({
     chatId,
     resetHeight,
     selectedSlashCommands,
+    pathname,
   ]);
 
-  const uploadFile = useCallback(async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
+  const uploadFile = useCallback(
+    async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
 
-    try {
-      const response = await fetch("/api/files/upload", {
-        method: "POST",
-        body: formData,
-      });
+      try {
+        const response = await fetch("/api/files/upload", {
+          method: "POST",
+          body: formData,
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        const { url, pathname, contentType } = data;
+        if (response.ok) {
+          const data = await response.json();
+          const { url, pathname, contentType } = data;
 
-        return {
-          url,
-          name: pathname,
-          contentType,
-        };
+          return {
+            url,
+            name: pathname,
+            contentType,
+          };
+        }
+        const { error } = await response.json();
+        toast.error(error);
+      } catch (_error) {
+        toast.error(t("upload.failed"));
       }
-      const { error } = await response.json();
-      toast.error(error);
-    } catch (_error) {
-      toast.error("Failed to upload file, please try again!");
-    }
-  }, []);
+    },
+    [t]
+  );
 
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -309,12 +328,12 @@ function PureMultimodalInput({
         ]);
       } catch (error) {
         console.error("Error uploading pasted images:", error);
-        toast.error("Failed to upload pasted image(s)");
+        toast.error(t("upload.failedPasted"));
       } finally {
         setUploadQueue([]);
       }
     },
-    [setAttachments, uploadFile]
+    [setAttachments, uploadFile, t]
   );
 
   // Add paste event listener to textarea
@@ -353,32 +372,42 @@ function PureMultimodalInput({
         className="overflow-visible rounded-xl border border-border bg-background p-3 shadow-xs transition-all duration-200 focus-within:border-border hover:border-muted-foreground/50"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!input.trim() && attachments.length === 0 && selectedSlashCommands.length === 0) {
+          if (
+            !input.trim() &&
+            attachments.length === 0 &&
+            selectedSlashCommands.length === 0
+          ) {
             return;
           }
           if (status !== "ready") {
-            toast.error("Please wait for the model to finish its response!");
+            toast.error(t("input.waitModel"));
           } else {
             submitForm();
           }
         }}
       >
-        {(attachments.length > 0 || uploadQueue.length > 0 || selectedSlashCommands.length > 0) && (
+        {(attachments.length > 0 ||
+          uploadQueue.length > 0 ||
+          selectedSlashCommands.length > 0) && (
           <div
             className="flex flex-row items-end gap-2 overflow-x-scroll"
             data-testid="attachments-preview"
           >
             {selectedSlashCommands.map((cmd) => (
               <div
-                key={cmd.id}
                 className="flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg px-2.5 py-1.5 text-sm shrink-0 whitespace-nowrap"
+                key={cmd.id}
               >
                 <WrenchIcon className="size-4" />
                 <span className="font-medium">@{cmd.id}</span>
                 <button
-                  type="button"
-                  onClick={() => setSelectedSlashCommands((s) => s.filter((x) => x.id !== cmd.id))}
                   className="text-primary/70 hover:text-primary transition-colors"
+                  onClick={() =>
+                    setSelectedSlashCommands((s) =>
+                      s.filter((x) => x.id !== cmd.id)
+                    )
+                  }
+                  type="button"
                 >
                   <XIcon className="size-4" />
                 </button>
@@ -415,13 +444,20 @@ function PureMultimodalInput({
         )}
         <div className="flex flex-row items-start gap-1 sm:gap-2 relative">
           <SlashCommandMenu
-            isOpen={slashCommand.isOpen}
             filteredCommands={slashCommand.filteredCommands}
-            selectedIndex={slashCommand.selectedIndex}
             isLoading={slashCommand.isLoading}
-            onSelect={(cmd) => slashCommand.handleSelectCommand(cmd, input, setInput, handleCommandSelect)}
-            onHover={slashCommand.setSelectedIndex}
+            isOpen={slashCommand.isOpen}
             onClose={slashCommand.closeMenu}
+            onHover={slashCommand.setSelectedIndex}
+            onSelect={(cmd) =>
+              slashCommand.handleSelectCommand(
+                cmd,
+                input,
+                setInput,
+                handleCommandSelect
+              )
+            }
+            selectedIndex={slashCommand.selectedIndex}
           />
           <PromptInputTextarea
             className="grow resize-none border-0! border-none! bg-transparent p-2 text-base outline-none ring-0 [-ms-overflow-style:none] [scrollbar-width:none] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-scrollbar]:hidden"
@@ -431,7 +467,7 @@ function PureMultimodalInput({
             minHeight={44}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
-            placeholder="Send a message..."
+            placeholder={t("input.placeholder")}
             ref={textareaRef}
             rows={1}
             value={input}
@@ -456,7 +492,10 @@ function PureMultimodalInput({
             <PromptInputSubmit
               className="size-8 rounded-full bg-primary text-primary-foreground transition-colors duration-200 hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
               data-testid="send-button"
-              disabled={(!input.trim() && selectedSlashCommands.length === 0) || uploadQueue.length > 0}
+              disabled={
+                (!input.trim() && selectedSlashCommands.length === 0) ||
+                uploadQueue.length > 0
+              }
               status={status}
             >
               <ArrowUpIcon size={14} />
@@ -528,6 +567,7 @@ function PureModelSelectorCompact({
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
 }) {
+  const { t } = useAppTranslation("chat");
   const [open, setOpen] = useState(false);
 
   const selectedModel =
@@ -554,7 +594,7 @@ function PureModelSelectorCompact({
         </Button>
       </ModelSelectorTrigger>
       <ModelSelectorContent>
-        <ModelSelectorInput placeholder="Search models..." />
+        <ModelSelectorInput placeholder={t("model.searchPlaceholder")} />
         <ModelSelectorList>
           {Object.entries(modelsByProvider).map(
             ([providerKey, providerModels]) => (

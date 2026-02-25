@@ -1,6 +1,9 @@
 import { motion } from "framer-motion";
+import { useAppTranslation } from "@/lib/i18n/hooks";
 
 export const Greeting = () => {
+  const { t } = useAppTranslation("chat");
+
   return (
     <div
       className="mx-auto mt-4 flex size-full max-w-3xl flex-col justify-center px-4 md:mt-16 md:px-8"
@@ -13,7 +16,7 @@ export const Greeting = () => {
         initial={{ opacity: 0, y: 10 }}
         transition={{ delay: 0.5 }}
       >
-        Hello there!
+        {t("greeting.hello")}
       </motion.div>
       <motion.div
         animate={{ opacity: 1, y: 0 }}
@@ -22,7 +25,7 @@ export const Greeting = () => {
         initial={{ opacity: 0, y: 10 }}
         transition={{ delay: 0.6 }}
       >
-        How can I help you today?
+        {t("greeting.question")}
       </motion.div>
     </div>
   );

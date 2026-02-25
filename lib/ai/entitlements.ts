@@ -1,4 +1,4 @@
-import type { UserType } from "@/app/(auth)/auth";
+import type { UserType } from "@/lib/server/auth/core";
 
 type Entitlements = {
   maxMessagesPerDay: number;
@@ -23,3 +23,4 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
    * TODO: For users with an account and a paid membership
    */
 };
+

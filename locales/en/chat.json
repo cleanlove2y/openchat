@@ -1,0 +1,23 @@
+{
+  "header.newChat": "New Chat",
+  "header.deployWithVercel": "Deploy with Vercel",
+  "visibility.private.label": "Private",
+  "visibility.private.description": "Only you can access this chat",
+  "visibility.public.label": "Public",
+  "visibility.public.description": "Anyone with the link can access this chat",
+  "greeting.hello": "Hello there!",
+  "greeting.question": "How can I help you today?",
+  "suggested.advantages": "What are the advantages of using Next.js?",
+  "suggested.dijkstra": "Write code to demonstrate Dijkstra's algorithm",
+  "suggested.essay": "Help me write an essay about Silicon Valley",
+  "suggested.weather": "What is the weather in San Francisco?",
+  "gateway.title": "Activate AI Gateway",
+  "gateway.descriptionOwner": "This application requires the owner to activate Vercel AI Gateway.",
+  "gateway.descriptionYou": "This application requires you to activate Vercel AI Gateway.",
+  "gateway.activate": "Activate",
+  "input.placeholder": "Send a message...",
+  "input.waitModel": "Please wait for the model to finish its response!",
+  "upload.failed": "Failed to upload file, please try again!",
+  "upload.failedPasted": "Failed to upload pasted image(s)",
+  "model.searchPlaceholder": "Search models..."
+}

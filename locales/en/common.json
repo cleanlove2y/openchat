@@ -1,0 +1,12 @@
+{
+  "action.cancel": "Cancel",
+  "action.close": "Close",
+  "locale.en": "English",
+  "locale.short.en": "EN",
+  "locale.short.zh": "ZH",
+  "locale.switchTo": "Switch to {{locale}}",
+  "locale.zh": "Chinese",
+  "status.loading": "Loading...",
+  "theme.dark": "dark",
+  "theme.light": "light"
+}

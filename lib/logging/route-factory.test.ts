@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { z } from "zod";
 
-import { createAuthedApiRoute } from "@/app/(chat)/api/_shared/authed-route";
+import { createAuthedApiRoute } from "@/app/api/_shared/authed-route";
 import { getRequestContext } from "./index";
 import { createApiRoute } from "./route-factory";
 
@@ -241,3 +241,4 @@ test("createAuthedApiRoute skips audit metadata extraction for unauthorized requ
   assert.equal(body.code, "unauthorized:api");
   assert.equal(metadataWasRead, false);
 });
+

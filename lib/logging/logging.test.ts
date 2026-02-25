@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createAuthedApiRoute } from "@/app/(chat)/api/_shared/authed-route";
+import { createAuthedApiRoute } from "@/app/api/_shared/authed-route";
 import {
   configureLoggingForTests,
   flushLoggersForTests,
@@ -534,3 +534,4 @@ test("does not break when cleanup fails", async () => {
     await rm(logDir, { recursive: true, force: true });
   }
 });
+

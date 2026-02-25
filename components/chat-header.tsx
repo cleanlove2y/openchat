@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { memo } from "react";
 import { useWindowSize } from "usehooks-ts";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Button } from "@/components/ui/button";
+import { useAppTranslation } from "@/lib/i18n/hooks";
+import { localizePathFromPathname } from "@/lib/i18n/navigation";
 import { PlusIcon, VercelIcon } from "./icons";
 import { useSidebar } from "./ui/sidebar";
 import { VisibilitySelector, type VisibilityType } from "./visibility-selector";
@@ -20,6 +22,8 @@ function PureChatHeader({
   isReadonly: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const { t } = useAppTranslation("chat");
   const { open } = useSidebar();
 
   const { width: windowWidth } = useWindowSize();
@@ -32,13 +36,13 @@ function PureChatHeader({
         <Button
           className="order-2 ml-auto h-8 px-2 md:order-1 md:ml-0 md:h-fit md:px-2"
           onClick={() => {
-            router.push("/");
+            router.push(localizePathFromPathname(pathname, "/"));
             router.refresh();
           }}
           variant="outline"
         >
           <PlusIcon />
-          <span className="md:sr-only">New Chat</span>
+          <span className="md:sr-only">{t("header.newChat")}</span>
         </Button>
       )}
 
@@ -60,7 +64,7 @@ function PureChatHeader({
           target="_noblank"
         >
           <VercelIcon size={16} />
-          Deploy with Vercel
+          {t("header.deployWithVercel")}
         </Link>
       </Button>
     </header>

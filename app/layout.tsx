@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { FALLBACK_LOCALE } from "@/lib/i18n/config";
 
 import "./globals.css";
 import { SessionProvider } from "next-auth/react";
@@ -60,7 +61,7 @@ export default function RootLayout({
       // visual flicker before hydration. Hence the `suppressHydrationWarning`
       // prop is necessary to avoid the React hydration mismatch warning.
       // https://github.com/pacocoursey/next-themes?tab=readme-ov-file#with-app
-      lang="en"
+      lang={FALLBACK_LOCALE}
       suppressHydrationWarning
     >
       <head>

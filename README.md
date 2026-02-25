@@ -1,5 +1,5 @@
 <a href="https://chat.vercel.ai/">
-  <img alt="Next.js 14 and App Router-ready OpenChat." src="app/(chat)/opengraph-image.png">
+  <img alt="Next.js 14 and App Router-ready OpenChat." src="app/[locale]/(chat)/opengraph-image.png">
   <h1 align="center">OpenChat</h1>
 </a>
 

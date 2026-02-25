@@ -1,6 +1,6 @@
 import Form from "next/form";
 
-import { auth, signOut } from "@/app/(auth)/auth";
+import { auth, signOut } from "@/lib/server/auth/core";
 import { writeAuditLog } from "@/lib/logging";
 
 export const SignOutForm = () => {
@@ -33,3 +33,4 @@ export const SignOutForm = () => {
     </Form>
   );
 };
+
