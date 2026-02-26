@@ -75,7 +75,9 @@ async function followRedirects(url: string, jar: CookieJar): Promise<Response> {
 
     const location = response.headers.get("location");
     if (!location) {
-      throw new Error(`Redirect response missing location header: ${response.status}`);
+      throw new Error(
+        `Redirect response missing location header: ${response.status}`
+      );
     }
 
     currentUrl = new URL(location, currentUrl).toString();
@@ -157,5 +159,52 @@ test("chat API loads skill and does not call weather tool", async () => {
     sse.includes('"toolName":"getWeather"'),
     false,
     "Unexpected getWeather tool call in SSE response"
+  );
+});
+
+test("chat API does not fail when prompt requests load_skill alias", async () => {
+  const jar: CookieJar = new Map();
+
+  const guestResponse = await followRedirects(
+    `${BASE_URL}/api/auth/guest?redirectUrl=/`,
+    jar
+  );
+  assert.equal(
+    guestResponse.ok,
+    true,
+    `Guest session creation failed with status ${guestResponse.status}`
+  );
+
+  const payload = {
+    id: crypto.randomUUID(),
+    message: {
+      role: "user",
+      id: crypto.randomUUID(),
+      parts: [
+        {
+          type: "text",
+          text: `Call the tool \`load_skill\` exactly once with skill name "${SKILL_NAME}". After the tool call, reply with exactly: loaded`,
+        },
+      ],
+    },
+    selectedChatModel: "google/gemini-2.5-flash-lite",
+    selectedVisibilityType: "private",
+  };
+
+  const chatResponse = await fetchWithCookies(`${BASE_URL}/api/chat`, jar, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  assert.equal(chatResponse.status, 200, "Chat API should return 200");
+  const sse = await chatResponse.text();
+
+  assert.equal(
+    sse.includes("unavailable tool 'load_skill'"),
+    false,
+    "Unexpected unavailable-tool error for load_skill alias"
   );
 });

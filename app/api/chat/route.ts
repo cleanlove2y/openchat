@@ -11,12 +11,13 @@ import {
 import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
 import { z } from "zod";
-import type { UserType } from "@/lib/server/auth/core";
 import {
   type AuthenticatedSession,
   createAuthedApiRoute,
 } from "@/app/api/_shared/authed-route";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
+import { getLanguageModel } from "@/lib/ai/providers";
 import {
   buildSkillsSystemPrompt,
   getSkillsConfig,
@@ -24,8 +25,10 @@ import {
   loadSkillByName,
   shouldEnableSkillTooling,
 } from "@/lib/ai/skills";
-import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
-import { getLanguageModel } from "@/lib/ai/providers";
+import {
+  collectSkillDirectiveNamesFromRequestBody,
+  extractSkillDirectives,
+} from "@/lib/ai/skills/directives";
 import { createDocument } from "@/lib/ai/tools/create-document";
 import { getWeather } from "@/lib/ai/tools/get-weather";
 import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
@@ -44,11 +47,12 @@ import {
 } from "@/lib/db/queries";
 import type { DBMessage } from "@/lib/db/schema";
 import { OpenChatError } from "@/lib/errors";
+import { getAppLogger } from "@/lib/logging";
+import type { UserType } from "@/lib/server/auth/core";
+import { generateTitleFromUserMessage } from "@/lib/server/chat/actions";
 import type { ChatMessage } from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
-import { generateTitleFromUserMessage } from "@/lib/server/chat/actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
-import { getAppLogger } from "@/lib/logging";
 
 export const maxDuration = 60;
 const appLogger = getAppLogger();
@@ -66,6 +70,69 @@ function getStreamContext() {
 }
 
 export { getStreamContext };
+
+function sanitizeUserSkillDirectivesForModel(
+  messages: ChatMessage[]
+): ChatMessage[] {
+  let changedAny = false;
+
+  const nextMessages = messages.map((message) => {
+    if (message.role !== "user") {
+      return message;
+    }
+
+    let changedMessage = false;
+    const nextParts = message.parts.map((part) => {
+      if (
+        part.type !== "text" ||
+        !("text" in part) ||
+        typeof part.text !== "string"
+      ) {
+        return part;
+      }
+
+      const { strippedText } = extractSkillDirectives(part.text);
+      if (strippedText !== part.text) {
+        changedMessage = true;
+        return { ...part, text: strippedText };
+      }
+
+      return part;
+    });
+
+    if (!changedMessage) {
+      return message;
+    }
+
+    changedAny = true;
+    return {
+      ...message,
+      parts: nextParts,
+    };
+  });
+
+  return changedAny ? nextMessages : messages;
+}
+
+function buildExplicitSkillsSystemPrompt(
+  loadedSkills: Array<{ name: string; content: string }>
+): string {
+  if (loadedSkills.length === 0) {
+    return "";
+  }
+
+  const skillBlocks = loadedSkills
+    .map((loadedSkill) =>
+      [`### Skill: ${loadedSkill.name}`, loadedSkill.content].join("\n")
+    )
+    .join("\n\n");
+
+  return [
+    "Explicit Skills Context:",
+    "The user explicitly selected these skills for this request.",
+    skillBlocks,
+  ].join("\n\n");
+}
 
 const postHandler = async ({
   request,
@@ -116,6 +183,11 @@ const postHandler = async ({
   const uiMessages = isToolApprovalFlow
     ? (messages as ChatMessage[])
     : [...convertToUIMessages(messagesFromDb), message as ChatMessage];
+  const modelUiMessages = sanitizeUserSkillDirectivesForModel(uiMessages);
+  const requestedSkillNames = collectSkillDirectiveNamesFromRequestBody({
+    message,
+    messages,
+  });
 
   const { longitude, latitude, city, country } = geolocation(request);
 
@@ -145,9 +217,10 @@ const postHandler = async ({
     selectedChatModel.includes("reasoning") ||
     selectedChatModel.includes("thinking");
 
-  const modelMessages = await convertToModelMessages(uiMessages);
+  const modelMessages = await convertToModelMessages(modelUiMessages);
   const skillsConfig = getSkillsConfig();
-  const skillsSnapshot = await getSkillsSnapshot(skillsConfig).catch((error) => {
+  const skillsSnapshot = await getSkillsSnapshot(skillsConfig).catch(
+    (error) => {
       appLogger.error(
         { event: "skills.snapshot.load_failed", error },
         "[skills] snapshot load failed (fail-open)"
@@ -162,48 +235,115 @@ const postHandler = async ({
         },
         errors: [],
       };
-    });
+    }
+  );
   const skillToolingEnabled = shouldEnableSkillTooling(
     skillsConfig.enabled,
     skillsSnapshot.skills.length,
     isReasoningModel
   );
+  const explicitlyLoadedSkills: Array<{ name: string; content: string }> = [];
+  const missingExplicitSkillNames: string[] = [];
+
+  for (const requestedSkillName of requestedSkillNames) {
+    const loadedSkill = await loadSkillByName(
+      skillsSnapshot.skills,
+      requestedSkillName,
+      skillsConfig,
+      {
+        source: "explicit_directive",
+        invokedToolName: null,
+      }
+    );
+
+    if (!loadedSkill) {
+      missingExplicitSkillNames.push(requestedSkillName);
+      continue;
+    }
+
+    explicitlyLoadedSkills.push({
+      name: loadedSkill.name,
+      content: loadedSkill.content,
+    });
+  }
+
+  if (requestedSkillNames.length > 0) {
+    appLogger.info(
+      {
+        event: "skills.explicit_resolution",
+        requestedSkillNames,
+        loadedSkillNames: explicitlyLoadedSkills.map((skill) => skill.name),
+        missingSkillNames: missingExplicitSkillNames,
+        chatId: id,
+      },
+      "[skills] explicit directives resolved"
+    );
+  }
+
   const skillsSystemPrompt = skillToolingEnabled
     ? buildSkillsSystemPrompt(skillsSnapshot.skills)
     : "";
+  const explicitSkillsSystemPrompt = buildExplicitSkillsSystemPrompt(
+    explicitlyLoadedSkills
+  );
   const baseSystemPrompt = systemPrompt({ selectedChatModel, requestHints });
-  const effectiveSystemPrompt = skillsSystemPrompt
-    ? `${baseSystemPrompt}\n\n${skillsSystemPrompt}`
-    : baseSystemPrompt;
+  const effectiveSystemPrompt = [
+    baseSystemPrompt,
+    skillsSystemPrompt,
+    explicitSkillsSystemPrompt,
+  ]
+    .filter((section) => section.length > 0)
+    .join("\n\n");
 
-  const loadSkillTool =
-    !skillToolingEnabled
-      ? undefined
-      : tool({
-            description:
-              "Load a skill by name and return its full instructions",
-            inputSchema: z.object({
-              name: z.string().describe("Skill name to load"),
-            }),
-            execute: async ({ name }) => {
-              const loadedSkill = await loadSkillByName(
-                skillsSnapshot.skills,
-                name,
-                skillsConfig
-              );
+  const executeLoadSkill = async ({
+    name,
+    invokedToolName,
+  }: {
+    name: string;
+    invokedToolName: "loadSkill" | "load_skill";
+  }) => {
+    const loadedSkill = await loadSkillByName(
+      skillsSnapshot.skills,
+      name,
+      skillsConfig,
+      {
+        source: "tool",
+        invokedToolName,
+      }
+    );
 
-              if (!loadedSkill) {
-                return {
-                  error: `Skill '${name}' not found`,
-                  availableSkills: skillsSnapshot.skills.map(
-                    (skill) => skill.name
-                  ),
-                };
-              }
+    if (!loadedSkill) {
+      return {
+        error: `Skill '${name}' not found`,
+        availableSkills: skillsSnapshot.skills.map((skill) => skill.name),
+      };
+    }
 
-              return loadedSkill;
-            },
-          });
+    return loadedSkill;
+  };
+
+  const loadSkillTool = skillToolingEnabled
+    ? tool({
+        description: "Load a skill by name and return its full instructions",
+        inputSchema: z.object({
+          name: z.string().describe("Skill name to load"),
+        }),
+        execute: ({ name }) =>
+          executeLoadSkill({ name, invokedToolName: "loadSkill" }),
+      })
+    : undefined;
+
+  const loadSkillAliasTool = skillToolingEnabled
+    ? tool({
+        description:
+          "Compatibility alias for loading a skill by name and returning full instructions",
+        inputSchema: z.object({
+          name: z.string().describe("Skill name to load"),
+        }),
+        execute: ({ name }) =>
+          executeLoadSkill({ name, invokedToolName: "load_skill" }),
+      })
+    : undefined;
 
   const activeTools: Array<
     | "getWeather"
@@ -211,6 +351,7 @@ const postHandler = async ({
     | "updateDocument"
     | "requestSuggestions"
     | "loadSkill"
+    | "load_skill"
   > = [];
 
   if (!isReasoningModel) {
@@ -224,82 +365,87 @@ const postHandler = async ({
     if (loadSkillTool) {
       activeTools.push("loadSkill");
     }
+
+    if (loadSkillAliasTool) {
+      activeTools.push("load_skill");
+    }
   }
 
   const stream = createUIMessageStream({
     originalMessages: isToolApprovalFlow ? uiMessages : undefined,
     execute: async ({ writer: dataStream }) => {
-        const result = streamText({
-          model: getLanguageModel(selectedChatModel),
-          system: effectiveSystemPrompt,
-          messages: modelMessages,
-          stopWhen: stepCountIs(5),
-          experimental_activeTools: activeTools,
-          providerOptions: isReasoningModel
-            ? {
-                anthropic: {
-                  thinking: { type: "enabled", budgetTokens: 10_000 },
-                },
-              }
-            : undefined,
-          tools: {
-            getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({ session, dataStream }),
-            ...(loadSkillTool ? { loadSkill: loadSkillTool } : {}),
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: "stream-text",
-          },
-        });
+      const result = streamText({
+        model: getLanguageModel(selectedChatModel),
+        system: effectiveSystemPrompt,
+        messages: modelMessages,
+        stopWhen: stepCountIs(5),
+        experimental_activeTools: activeTools,
+        providerOptions: isReasoningModel
+          ? {
+              anthropic: {
+                thinking: { type: "enabled", budgetTokens: 10_000 },
+              },
+            }
+          : undefined,
+        tools: {
+          getWeather,
+          createDocument: createDocument({ session, dataStream }),
+          updateDocument: updateDocument({ session, dataStream }),
+          requestSuggestions: requestSuggestions({ session, dataStream }),
+          ...(loadSkillTool ? { loadSkill: loadSkillTool } : {}),
+          ...(loadSkillAliasTool ? { load_skill: loadSkillAliasTool } : {}),
+        },
+        experimental_telemetry: {
+          isEnabled: isProductionEnvironment,
+          functionId: "stream-text",
+        },
+      });
 
-        dataStream.merge(result.toUIMessageStream({ sendReasoning: true }));
+      dataStream.merge(result.toUIMessageStream({ sendReasoning: true }));
 
-        if (titlePromise) {
-          const title = await titlePromise;
-          dataStream.write({ type: "data-chat-title", data: title });
-          updateChatTitleById({ chatId: id, title });
-        }
+      if (titlePromise) {
+        const title = await titlePromise;
+        dataStream.write({ type: "data-chat-title", data: title });
+        updateChatTitleById({ chatId: id, title });
+      }
     },
     generateId: generateUUID,
     onFinish: async ({ messages: finishedMessages }) => {
-        if (isToolApprovalFlow) {
-          for (const finishedMsg of finishedMessages) {
-            const existingMsg = uiMessages.find((m) => m.id === finishedMsg.id);
-            if (existingMsg) {
-              await updateMessage({
-                id: finishedMsg.id,
-                parts: finishedMsg.parts,
-              });
-            } else {
-              await saveMessages({
-                messages: [
-                  {
-                    id: finishedMsg.id,
-                    role: finishedMsg.role,
-                    parts: finishedMsg.parts,
-                    createdAt: new Date(),
-                    attachments: [],
-                    chatId: id,
-                  },
-                ],
-              });
-            }
+      if (isToolApprovalFlow) {
+        for (const finishedMsg of finishedMessages) {
+          const existingMsg = uiMessages.find((m) => m.id === finishedMsg.id);
+          if (existingMsg) {
+            await updateMessage({
+              id: finishedMsg.id,
+              parts: finishedMsg.parts,
+            });
+          } else {
+            await saveMessages({
+              messages: [
+                {
+                  id: finishedMsg.id,
+                  role: finishedMsg.role,
+                  parts: finishedMsg.parts,
+                  createdAt: new Date(),
+                  attachments: [],
+                  chatId: id,
+                },
+              ],
+            });
           }
-        } else if (finishedMessages.length > 0) {
-          await saveMessages({
-            messages: finishedMessages.map((currentMessage) => ({
-              id: currentMessage.id,
-              role: currentMessage.role,
-              parts: currentMessage.parts,
-              createdAt: new Date(),
-              attachments: [],
-              chatId: id,
-            })),
-          });
         }
+      } else if (finishedMessages.length > 0) {
+        await saveMessages({
+          messages: finishedMessages.map((currentMessage) => ({
+            id: currentMessage.id,
+            role: currentMessage.role,
+            parts: currentMessage.parts,
+            createdAt: new Date(),
+            attachments: [],
+            chatId: id,
+          })),
+        });
+      }
     },
     onError: () => "Oops, an error occurred!",
   });
@@ -307,22 +453,22 @@ const postHandler = async ({
   return createUIMessageStreamResponse({
     stream,
     async consumeSseStream({ stream: sseStream }) {
-        if (!process.env.REDIS_URL) {
-          return;
+      if (!process.env.REDIS_URL) {
+        return;
+      }
+      try {
+        const streamContext = getStreamContext();
+        if (streamContext) {
+          const streamId = generateId();
+          await createStreamId({ streamId, chatId: id });
+          await streamContext.createNewResumableStream(
+            streamId,
+            () => sseStream
+          );
         }
-        try {
-          const streamContext = getStreamContext();
-          if (streamContext) {
-            const streamId = generateId();
-            await createStreamId({ streamId, chatId: id });
-            await streamContext.createNewResumableStream(
-              streamId,
-              () => sseStream
-            );
-          }
-        } catch (_) {
-          // ignore redis errors
-        }
+      } catch (_) {
+        // ignore redis errors
+      }
     },
   });
 };
@@ -347,21 +493,23 @@ const deleteHandler = async ({
   return Response.json(deletedChat, { status: 200 });
 };
 
-const parseChatPostRequest = async (request: Request): Promise<PostRequestBody> => {
+const parseChatPostRequest = async (
+  request: Request
+): Promise<PostRequestBody> => {
   const json = await request.json();
   return postRequestBodySchema.parse(json);
 };
 
-const parseDeleteChatRequest = async (
+const parseDeleteChatRequest = (
   request: Request
-): Promise<z.infer<typeof deleteChatInputSchema>> => {
+): z.infer<typeof deleteChatInputSchema> => {
   const searchParams = new URL(request.url).searchParams;
   return deleteChatInputSchema.parse({
     id: searchParams.get("id"),
   });
 };
 
-const mapChatPostError = async (error: unknown, request: Request) => {
+const mapChatPostError = (error: unknown, request: Request) => {
   const vercelId = request.headers.get("x-vercel-id");
 
   if (error instanceof OpenChatError) {
@@ -407,8 +555,13 @@ const chatSubmitAudit = {
       const body = (await requestForAudit.json()) as {
         selectedChatModel?: unknown;
         selectedVisibilityType?: unknown;
+        message?: unknown;
         messages?: unknown;
       };
+      const requestedSkillNames = collectSkillDirectiveNamesFromRequestBody({
+        message: body.message,
+        messages: body.messages,
+      });
 
       return {
         selectedChatModel:
@@ -420,6 +573,8 @@ const chatSubmitAudit = {
             ? body.selectedVisibilityType
             : null,
         isToolApprovalFlow: Array.isArray(body.messages),
+        requestedSkillNames,
+        requestedSkillCount: requestedSkillNames.length,
       };
     } catch (_) {
       return undefined;
@@ -456,4 +611,3 @@ export const DELETE = createAuthedApiRoute<
   audit: chatDeleteAudit,
   handler: deleteHandler,
 });
-

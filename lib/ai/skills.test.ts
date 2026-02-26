@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  buildSkillsSystemPrompt,
   getSkillsConfig,
   getSkillsSnapshot,
   loadSkillByName,
@@ -254,6 +255,22 @@ test("shouldEnableSkillTooling respects enabled flag, skill count, and reasoning
   assert.equal(shouldEnableSkillTooling(true, 1, false), true);
   assert.equal(shouldEnableSkillTooling(true, 0, false), false);
   assert.equal(shouldEnableSkillTooling(false, 1, false), false);
+});
+
+test("buildSkillsSystemPrompt enforces canonical loadSkill tool naming", () => {
+  const prompt = buildSkillsSystemPrompt([
+    {
+      name: "Resume Polisher",
+      description: "Improve resumes",
+      source: "workspace",
+      skillDir: "/tmp/skill",
+      skillFile: "/tmp/skill/SKILL.md",
+      metadata: {},
+    },
+  ]);
+
+  assert.equal(prompt.includes("loadSkill"), true);
+  assert.equal(prompt.includes("Do NOT call `load_skill`"), true);
 });
 
 test("ENABLE_SKILLS defaults to true and SKILLS_DIRS is ignored", () => {

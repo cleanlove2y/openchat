@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { parseSkillDocument } from "./parser";
-import { recordLoadSkillInvocation } from "./telemetry";
 import { withTimeout } from "./security";
+import { recordLoadSkillInvocation } from "./telemetry";
 import type { LoadedSkill, SkillMetadata, SkillsConfig } from "./types";
 
 export function shouldEnableSkillTooling(
@@ -29,8 +29,9 @@ export function buildSkillsSystemPrompt(skills: SkillMetadata[]): string {
     "Use these skills only when relevant.",
     "Workflow:",
     "1) Match user intent against skill descriptions.",
-    "2) Call `loadSkill` with the exact skill name.",
-    "3) Follow loaded instructions and referenced assets.",
+    "2) Call `loadSkill` with the exact skill name (camelCase only).",
+    "3) Do NOT call `load_skill`, `load-skill`, or any other tool-name variant.",
+    "4) Follow loaded instructions and referenced assets.",
     "Available skills:",
     skillList,
   ].join("\n");
@@ -39,7 +40,11 @@ export function buildSkillsSystemPrompt(skills: SkillMetadata[]): string {
 export async function loadSkillByName(
   skills: SkillMetadata[],
   name: string,
-  config: SkillsConfig
+  config: SkillsConfig,
+  context?: {
+    source?: "tool" | "explicit_directive" | "internal";
+    invokedToolName?: string | null;
+  }
 ): Promise<LoadedSkill | null> {
   const startedAt = Date.now();
   const normalizedName = name.trim().toLowerCase();
@@ -48,7 +53,13 @@ export async function loadSkillByName(
   );
 
   if (!matchedSkill) {
-    recordLoadSkillInvocation(name, false, Date.now() - startedAt);
+    recordLoadSkillInvocation(
+      name,
+      false,
+      Date.now() - startedAt,
+      undefined,
+      context
+    );
     return null;
   }
 
@@ -63,7 +74,13 @@ export async function loadSkillByName(
       const error = new Error(
         `Skill file exceeds max size (${config.maxFileBytes} bytes)`
       );
-      recordLoadSkillInvocation(matchedSkill.name, false, Date.now() - startedAt, error);
+      recordLoadSkillInvocation(
+        matchedSkill.name,
+        false,
+        Date.now() - startedAt,
+        error,
+        context
+      );
       return null;
     }
 
@@ -75,7 +92,13 @@ export async function loadSkillByName(
 
     const parsed = parseSkillDocument(content);
 
-    recordLoadSkillInvocation(matchedSkill.name, true, Date.now() - startedAt);
+    recordLoadSkillInvocation(
+      matchedSkill.name,
+      true,
+      Date.now() - startedAt,
+      undefined,
+      context
+    );
     return {
       name: matchedSkill.name,
       skillDirectory: matchedSkill.skillDir,
@@ -86,7 +109,8 @@ export async function loadSkillByName(
       matchedSkill.name,
       false,
       Date.now() - startedAt,
-      error instanceof Error ? error : new Error("Unknown skill load error")
+      error instanceof Error ? error : new Error("Unknown skill load error"),
+      context
     );
 
     return null;
