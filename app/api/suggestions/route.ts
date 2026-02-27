@@ -1,10 +1,10 @@
+import { z } from "zod";
 import {
   type AuthenticatedSession,
   createAuthedApiRoute,
 } from "@/app/api/_shared/authed-route";
 import { getSuggestionsByDocumentId } from "@/lib/db/queries";
 import { OpenChatError } from "@/lib/errors";
-import { z } from "zod";
 
 const suggestionsQuerySchema = z.object({
   documentId: z.string().min(1),
@@ -36,19 +36,18 @@ const getHandler = async ({
   return Response.json(suggestions, { status: 200 });
 };
 
-export const GET = createAuthedApiRoute<
-  z.infer<typeof suggestionsQuerySchema>
->({
+export const GET = createAuthedApiRoute<z.infer<typeof suggestionsQuerySchema>>(
+  {
     route: "/api/suggestions",
     method: "GET",
     unauthorizedErrorCode: "unauthorized:suggestions",
     badRequestErrorCode: "bad_request:api",
-    parseRequest: async (request) => {
+    parseRequest: (request) => {
       const searchParams = new URL(request.url).searchParams;
       return suggestionsQuerySchema.parse({
         documentId: searchParams.get("documentId"),
       });
     },
     handler: getHandler,
-  });
-
+  }
+);

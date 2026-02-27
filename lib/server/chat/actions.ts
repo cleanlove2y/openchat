@@ -2,7 +2,6 @@
 
 import { generateText, type UIMessage } from "ai";
 import { cookies } from "next/headers";
-import { auth } from "@/lib/server/auth/core";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { titlePrompt } from "@/lib/ai/prompts";
 import { getTitleModel } from "@/lib/ai/providers";
@@ -12,6 +11,7 @@ import {
   updateChatVisibilityById,
 } from "@/lib/db/queries";
 import { writeAuditLog } from "@/lib/logging";
+import { auth } from "@/lib/server/auth/core";
 import { getTextFromMessage } from "@/lib/utils";
 
 export async function saveChatModelAsCookie(model: string) {
@@ -116,4 +116,3 @@ export async function updateChatVisibility({
     throw error;
   }
 }
-

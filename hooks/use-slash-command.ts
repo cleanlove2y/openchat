@@ -21,9 +21,19 @@ interface SlashCommandHookReturn {
   filteredCommands: SlashCommandItem[];
   selectedIndex: number;
   isLoading: boolean;
-  handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>, input: string, setInput: (v: string) => void, onCommandSelect?: (cmd: SlashCommandItem) => void) => void;
+  handleKeyDown: (
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+    input: string,
+    setInput: (v: string) => void,
+    onCommandSelect?: (cmd: SlashCommandItem) => void
+  ) => void;
   handleChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  handleSelectCommand: (command: SlashCommandItem, input: string, setInput: (v: string) => void, onCommandSelect?: (cmd: SlashCommandItem) => void) => void;
+  handleSelectCommand: (
+    command: SlashCommandItem,
+    input: string,
+    setInput: (v: string) => void,
+    onCommandSelect?: (cmd: SlashCommandItem) => void
+  ) => void;
   closeMenu: () => void;
   setSelectedIndex: (index: number) => void;
 }
@@ -45,11 +55,12 @@ export function useSlashCommand(): SlashCommandHookReturn {
   );
 
   const commands = data?.commands || [];
-  
+
   // Basic filtering based on the query
-  const filteredCommands = commands.filter(cmd => 
-    cmd.title.toLowerCase().includes(query.toLowerCase()) || 
-    cmd.description.toLowerCase().includes(query.toLowerCase())
+  const filteredCommands = commands.filter(
+    (cmd) =>
+      cmd.title.toLowerCase().includes(query.toLowerCase()) ||
+      cmd.description.toLowerCase().includes(query.toLowerCase())
   );
 
   const closeMenu = useCallback(() => {
@@ -70,11 +81,16 @@ export function useSlashCommand(): SlashCommandHookReturn {
 
       if (lastSlashIndex !== -1) {
         // Check character before slash
-        const charBeforeSlash = lastSlashIndex > 0 ? textBeforeCursor[lastSlashIndex - 1] : " ";
-        if (charBeforeSlash === " " || charBeforeSlash === "\n" || lastSlashIndex === 0) {
+        const charBeforeSlash =
+          lastSlashIndex > 0 ? textBeforeCursor[lastSlashIndex - 1] : " ";
+        if (
+          charBeforeSlash === " " ||
+          charBeforeSlash === "\n" ||
+          lastSlashIndex === 0
+        ) {
           // Extract the potential query
           const potentialQuery = textBeforeCursor.substring(lastSlashIndex + 1);
-          
+
           // If the query contains space or newline, it means slash command is broken/completed
           if (!potentialQuery.includes(" ") && !potentialQuery.includes("\n")) {
             setIsOpen(true);
@@ -95,7 +111,12 @@ export function useSlashCommand(): SlashCommandHookReturn {
   );
 
   const handleSelectCommand = useCallback(
-    (command: SlashCommandItem, input: string, setInput: (v: string) => void, onCommandSelect?: (cmd: SlashCommandItem) => void) => {
+    (
+      command: SlashCommandItem,
+      input: string,
+      setInput: (v: string) => void,
+      onCommandSelect?: (cmd: SlashCommandItem) => void
+    ) => {
       if (slashIndex === -1) {
         return;
       }
@@ -120,7 +141,12 @@ export function useSlashCommand(): SlashCommandHookReturn {
   );
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>, input: string, setInput: (v: string) => void, onCommandSelect?: (cmd: SlashCommandItem) => void) => {
+    (
+      e: React.KeyboardEvent<HTMLTextAreaElement>,
+      input: string,
+      setInput: (v: string) => void,
+      onCommandSelect?: (cmd: SlashCommandItem) => void
+    ) => {
       const keyAction = getSlashCommandKeyAction({
         isOpen,
         key: e.key,
@@ -139,21 +165,39 @@ export function useSlashCommand(): SlashCommandHookReturn {
       }
 
       if (keyAction.action === "move-down") {
-        setSelectedIndex((prev) => (prev + 1) % Math.max(1, filteredCommands.length));
+        setSelectedIndex(
+          (prev) => (prev + 1) % Math.max(1, filteredCommands.length)
+        );
         return;
       }
 
       if (keyAction.action === "move-up") {
-        setSelectedIndex((prev) => (prev - 1 + filteredCommands.length) % Math.max(1, filteredCommands.length));
+        setSelectedIndex(
+          (prev) =>
+            (prev - 1 + filteredCommands.length) %
+            Math.max(1, filteredCommands.length)
+        );
         return;
       }
 
       if (keyAction.action === "select" && filteredCommands.length > 0) {
-        handleSelectCommand(filteredCommands[selectedIndex], input, setInput, onCommandSelect);
+        handleSelectCommand(
+          filteredCommands[selectedIndex],
+          input,
+          setInput,
+          onCommandSelect
+        );
         return;
       }
     },
-    [isOpen, closeMenu, selectedIndex, filteredCommands, handleSelectCommand, slashIndex]
+    [
+      isOpen,
+      closeMenu,
+      selectedIndex,
+      filteredCommands,
+      handleSelectCommand,
+      slashIndex,
+    ]
   );
 
   return {
@@ -167,6 +211,6 @@ export function useSlashCommand(): SlashCommandHookReturn {
     handleChange,
     handleSelectCommand,
     closeMenu,
-    setSelectedIndex
+    setSelectedIndex,
   };
 }

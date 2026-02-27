@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { signIn } from "@/lib/server/auth/core";
 import { isDevelopmentEnvironment } from "@/lib/constants";
 import { FALLBACK_LOCALE } from "@/lib/i18n/config";
 import { getLocaleFromPathname, withLocalePath } from "@/lib/i18n/routing";
 import { createApiRoute } from "@/lib/logging/route-factory";
+import { signIn } from "@/lib/server/auth/core";
 
 function resolveLocalizedHome(
   redirectUrl: string | null,
@@ -58,4 +58,3 @@ export const GET = createApiRoute({
   },
   handler: getHandler,
 });
-

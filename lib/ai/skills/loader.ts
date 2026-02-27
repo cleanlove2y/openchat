@@ -55,7 +55,9 @@ function normalizeDescription(description: string): string {
   return description.length > 1024 ? description.slice(0, 1024) : description;
 }
 
-export async function loadSkillsSnapshot(config: SkillsConfig): Promise<SkillsSnapshot> {
+export async function loadSkillsSnapshot(
+  config: SkillsConfig
+): Promise<SkillsSnapshot> {
   if (!config.enabled) {
     return createEmptySkillsSnapshot();
   }
@@ -93,7 +95,9 @@ export async function loadSkillsSnapshot(config: SkillsConfig): Promise<SkillsSn
         snapshot.errors,
         root.source,
         code,
-        error instanceof Error ? error.message : "Unable to read skills directory",
+        error instanceof Error
+          ? error.message
+          : "Unable to read skills directory",
         root.path
       );
       continue;
@@ -153,7 +157,9 @@ export async function loadSkillsSnapshot(config: SkillsConfig): Promise<SkillsSn
           snapshot.errors,
           root.source,
           "skill_file_unreadable",
-          error instanceof Error ? error.message : "Unable to inspect skill directory",
+          error instanceof Error
+            ? error.message
+            : "Unable to inspect skill directory",
           skillDir
         );
         continue;

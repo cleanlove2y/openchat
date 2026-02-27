@@ -1,4 +1,4 @@
-import { OpenChatError, type ErrorCode } from "@/lib/errors";
+import { type ErrorCode, OpenChatError } from "@/lib/errors";
 import { setRequestActor, withRouteLogging } from "./index";
 
 type SessionUserLike = {
@@ -41,10 +41,7 @@ export type RouteFactoryOptions<
     request: Request,
     ...args: TArgs
   ) => MaybePromise<Response>;
-  parseRequest?: (
-    request: Request,
-    ...args: TArgs
-  ) => MaybePromise<TInput>;
+  parseRequest?: (request: Request, ...args: TArgs) => MaybePromise<TInput>;
   mapError?: (
     error: unknown,
     context: RouteFactoryContext<
@@ -120,7 +117,7 @@ export function createApiRoute<
         });
       }
 
-      let input: TInput | undefined = undefined;
+      let input: TInput | undefined;
 
       if (options.parseRequest) {
         try {
@@ -142,9 +139,9 @@ export function createApiRoute<
       > = {
         request,
         args,
-        session: (
-          options.requireUser ? (session as TSession) : session
-        ) as RouteFactoryContext<
+        session: (options.requireUser
+          ? (session as TSession)
+          : session) as RouteFactoryContext<
           TSession,
           TArgs,
           TInput | undefined,

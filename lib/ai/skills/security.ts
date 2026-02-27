@@ -1,6 +1,6 @@
+import { spawn } from "node:child_process";
 import { lstat } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
-import { spawn } from "node:child_process";
 import type { SkillsConfig } from "./types";
 
 const binCheckCache = new Map<string, boolean>();
@@ -9,10 +9,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function getNestedValue(
-  root: Record<string, unknown>,
-  path: string
-): unknown {
+function getNestedValue(root: Record<string, unknown>, path: string): unknown {
   return path.split(".").reduce<unknown>((current, segment) => {
     if (!current || typeof current !== "object" || Array.isArray(current)) {
       return undefined;
@@ -48,7 +45,10 @@ export async function withTimeout<T>(
   }
 }
 
-export function isPathWithinRoot(rootPath: string, targetPath: string): boolean {
+export function isPathWithinRoot(
+  rootPath: string,
+  targetPath: string
+): boolean {
   const resolvedRoot = resolve(rootPath);
   const resolvedTarget = resolve(targetPath);
   const diff = relative(resolvedRoot, resolvedTarget);
@@ -152,7 +152,10 @@ export async function isSkillEligibleByMetadata(
   return { eligible: true };
 }
 
-export async function isSymlinkPath(path: string, timeoutMs: number): Promise<boolean> {
+export async function isSymlinkPath(
+  path: string,
+  timeoutMs: number
+): Promise<boolean> {
   const stats = await withTimeout(
     lstat(path),
     timeoutMs,

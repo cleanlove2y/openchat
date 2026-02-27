@@ -22,11 +22,7 @@ const FileSchema = z.object({
     }),
 });
 
-const postHandler = async ({
-  request,
-}: {
-  request: Request;
-}) => {
+const postHandler = async ({ request }: { request: Request }) => {
   if (request.body === null) {
     return new Response("Request body is empty", { status: 400 });
   }
@@ -72,42 +68,41 @@ const postHandler = async ({
 };
 
 export const POST = createAuthedApiRoute({
-    route: "/api/files/upload",
-    method: "POST",
-    unauthorizedResponse: async () =>
-      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    audit: {
-      action: "file.upload",
-      resourceType: "blob",
-      getMetadata: async (requestForAudit) => {
-        try {
-          const formData = await requestForAudit.formData();
-          const file = formData.get("file");
+  route: "/api/files/upload",
+  method: "POST",
+  unauthorizedResponse: async () =>
+    NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+  audit: {
+    action: "file.upload",
+    resourceType: "blob",
+    getMetadata: async (requestForAudit) => {
+      try {
+        const formData = await requestForAudit.formData();
+        const file = formData.get("file");
 
-          if (!(file instanceof Blob)) {
-            return {
-              filePresent: false,
-            };
-          }
-
-          const filename = getBlobFilename(file);
-
+        if (!(file instanceof Blob)) {
           return {
-            filePresent: true,
-            filename:
-              typeof filename === "string"
-                ? {
-                    length: filename.length,
-                  }
-                : null,
-            size: file.size,
-            mediaType: file.type,
+            filePresent: false,
           };
-        } catch (_) {
-          return undefined;
         }
-      },
-    },
-    handler: postHandler,
-  });
 
+        const filename = getBlobFilename(file);
+
+        return {
+          filePresent: true,
+          filename:
+            typeof filename === "string"
+              ? {
+                  length: filename.length,
+                }
+              : null,
+          size: file.size,
+          mediaType: file.type,
+        };
+      } catch (_) {
+        return undefined;
+      }
+    },
+  },
+  handler: postHandler,
+});

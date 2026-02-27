@@ -1,10 +1,10 @@
+import { z } from "zod";
 import {
   type AuthenticatedSession,
   createAuthedApiRoute,
 } from "@/app/api/_shared/authed-route";
 import { getChatById, getVotesByChatId, voteMessage } from "@/lib/db/queries";
 import { OpenChatError } from "@/lib/errors";
-import { z } from "zod";
 
 const voteGetQuerySchema = z.object({
   chatId: z.string().min(1),
@@ -69,20 +69,21 @@ const patchHandler = async ({
 };
 
 export const GET = createAuthedApiRoute<z.infer<typeof voteGetQuerySchema>>({
-    route: "/api/vote",
-    method: "GET",
-    unauthorizedErrorCode: "unauthorized:vote",
-    badRequestErrorCode: "bad_request:api",
-    parseRequest: async (request) => {
-      const searchParams = new URL(request.url).searchParams;
-      return voteGetQuerySchema.parse({
-        chatId: searchParams.get("chatId"),
-      });
-    },
-    handler: getHandler,
-  });
+  route: "/api/vote",
+  method: "GET",
+  unauthorizedErrorCode: "unauthorized:vote",
+  badRequestErrorCode: "bad_request:api",
+  parseRequest: (request) => {
+    const searchParams = new URL(request.url).searchParams;
+    return voteGetQuerySchema.parse({
+      chatId: searchParams.get("chatId"),
+    });
+  },
+  handler: getHandler,
+});
 
-export const PATCH = createAuthedApiRoute<z.infer<typeof votePatchInputSchema>>({
+export const PATCH = createAuthedApiRoute<z.infer<typeof votePatchInputSchema>>(
+  {
     route: "/api/vote",
     method: "PATCH",
     unauthorizedErrorCode: "unauthorized:vote",
@@ -112,5 +113,5 @@ export const PATCH = createAuthedApiRoute<z.infer<typeof votePatchInputSchema>>(
       },
     },
     handler: patchHandler,
-  });
-
+  }
+);

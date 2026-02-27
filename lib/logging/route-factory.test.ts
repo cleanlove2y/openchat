@@ -34,7 +34,7 @@ test("createApiRoute injects actor into request context", async () => {
         type: "regular",
       },
     }),
-    handler: async () => {
+    handler: () => {
       const context = getRequestContext();
       return Response.json({
         userId: context?.userId,
@@ -128,13 +128,13 @@ test("createApiRoute supports mapError for unified error handling", async () => 
   const route = createApiRoute({
     route: "/api/error-map",
     method: "GET",
-    mapError: async (error) => {
+    mapError: (error) => {
       if (error instanceof Error && error.message === "boom") {
         return Response.json({ code: "mapped:error" }, { status: 500 });
       }
       return undefined;
     },
-    handler: async () => {
+    handler: () => {
       throw new Error("boom");
     },
   });
@@ -241,4 +241,3 @@ test("createAuthedApiRoute skips audit metadata extraction for unauthorized requ
   assert.equal(body.code, "unauthorized:api");
   assert.equal(metadataWasRead, false);
 });
-

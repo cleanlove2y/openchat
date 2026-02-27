@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -52,7 +59,7 @@ test("withRouteLogging writes app logs and attaches x-request-id", async () => {
         route: "/api/test",
         method: "POST",
       },
-      async () => {
+      () => {
         setRequestActor({ userId: "user-1", userType: "regular" });
         return Response.json({ ok: true }, { status: 201 });
       }
@@ -101,7 +108,7 @@ test("withRouteLogging writes success audit logs for mutating endpoints", async 
             new URL(request.url).searchParams.get("id") ?? undefined,
         },
       },
-      async () => {
+      () => {
         setRequestActor({ userId: "user-2", userType: "regular" });
         return new Response(null, { status: 200 });
       }
@@ -144,13 +151,15 @@ test("withRouteLogging writes failed audit logs for rejected requests", async ()
           resourceType: "document",
         },
       },
-      async () => {
+      () => {
         return Response.json({ code: "forbidden:document" }, { status: 403 });
       }
     );
 
     const response = await handler(
-      new Request("http://localhost/api/document?id=doc-1", { method: "DELETE" })
+      new Request("http://localhost/api/document?id=doc-1", {
+        method: "DELETE",
+      })
     );
 
     assert.equal(response.status, 403);
@@ -205,7 +214,9 @@ test("withRouteLogging can log request/response bodies when enabled", async () =
 
     const lines = await readJsonLines(appLogPath(logDir));
     const start = lines.find((line) => line.event === "http.request.start");
-    const complete = lines.find((line) => line.event === "http.request.complete");
+    const complete = lines.find(
+      (line) => line.event === "http.request.complete"
+    );
 
     assert.ok(start);
     assert.ok(complete);
@@ -303,7 +314,7 @@ test("withRouteLogging treats NEXT_REDIRECT as a successful audit event", async 
           resourceType: "session",
         },
       },
-      async () => {
+      () => {
         const redirectError = new Error("NEXT_REDIRECT") as Error & {
           digest: string;
         };
@@ -313,7 +324,9 @@ test("withRouteLogging treats NEXT_REDIRECT as a successful audit event", async 
     );
 
     await assert.rejects(
-      handler(new Request("http://localhost/api/auth/guest", { method: "POST" })),
+      handler(
+        new Request("http://localhost/api/auth/guest", { method: "POST" })
+      ),
       (error: unknown) => {
         const err = error as Error & { digest?: string };
         return err.message === "NEXT_REDIRECT" && err.digest?.includes("/chat");
@@ -534,4 +547,3 @@ test("does not break when cleanup fails", async () => {
     await rm(logDir, { recursive: true, force: true });
   }
 });
-

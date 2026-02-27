@@ -14,7 +14,9 @@ function ensureStringField(
   return value.trim();
 }
 
-function ensureMetadataField(source: Record<string, unknown>): Record<string, unknown> {
+function ensureMetadataField(
+  source: Record<string, unknown>
+): Record<string, unknown> {
   const metadata = source.metadata;
 
   if (metadata == null) {

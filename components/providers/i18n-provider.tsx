@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo } from "react";
 import { I18nextProvider } from "react-i18next";
-import type { AppLocale } from "@/lib/i18n/config";
 import { createI18nInstance } from "@/lib/i18n/client";
+import type { AppLocale } from "@/lib/i18n/config";
 
 export function I18nProvider({
   children,

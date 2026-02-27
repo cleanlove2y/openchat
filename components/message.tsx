@@ -1,17 +1,17 @@
 "use client";
 import type { UseChatHelpers } from "@ai-sdk/react";
-import { useState } from "react";
-import type { Vote } from "@/lib/db/schema";
-import type { ChatMessage } from "@/lib/types";
-import { cn, sanitizeText } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, WrenchIcon } from "lucide-react";
+import { useState } from "react";
+import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
+import type { Vote } from "@/lib/db/schema";
+import type { ChatMessage } from "@/lib/types";
+import { cn, sanitizeText } from "@/lib/utils";
 import { useDataStream } from "./data-stream-provider";
 import { DocumentToolResult } from "./document";
 import { DocumentPreview } from "./document-preview";
@@ -70,12 +70,13 @@ const PurePreviewMessage = ({
   const hasTextParts = messageParts.some(
     (part) => part.type === "text" && part.text?.trim()
   );
-  const hasToolParts = messageParts.some((part) => part.type.startsWith("tool-"));
+  const hasToolParts = messageParts.some((part) =>
+    part.type.startsWith("tool-")
+  );
   const hasReasoningParts = messageParts.some(
     (part) =>
       part.type === "reasoning" &&
-      (part.text?.trim() ||
-        ("state" in part && part.state === "streaming"))
+      (part.text?.trim() || ("state" in part && part.state === "streaming"))
   );
   const hasVisibleContent =
     hasTextParts ||
@@ -159,7 +160,10 @@ const PurePreviewMessage = ({
               <div className="flex items-center gap-2 px-3 py-2.5">
                 <RegenerateSparkIcon className="size-4 animate-spin text-blue-400" />
                 <span className="font-medium text-foreground/90">Thinking</span>
-                <ThinkingIndicator className="text-blue-400" dotClassName="bg-blue-400" />
+                <ThinkingIndicator
+                  className="text-blue-400"
+                  dotClassName="bg-blue-400"
+                />
               </div>
             </div>
           )}
@@ -207,20 +211,26 @@ const PurePreviewMessage = ({
 
                 if (message.role === "user") {
                   const skillRegex = /\[Use Skill: ([^\]]+)\]/g;
-                  let match;
-                  while ((match = skillRegex.exec(textContent)) !== null) {
+                  for (const match of textContent.matchAll(skillRegex)) {
                     skills.push(match[1]);
                   }
                   // Remove the tags and any leading newlines they left behind
-                  textContent = textContent.replace(/\[Use Skill: [^\]]+\]/g, "").replace(/^\n+/, "");
+                  textContent = textContent
+                    .replace(/\[Use Skill: [^\]]+\]/g, "")
+                    .replace(/^\n+/, "");
                 }
 
                 return (
-                  <div key={key} className={cn("flex flex-col gap-2", { "items-end": message.role === "user" })}>
+                  <div
+                    className={cn("flex flex-col gap-2", {
+                      "items-end": message.role === "user",
+                    })}
+                    key={key}
+                  >
                     {message.role === "user" && skills.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1.5 justify-end">
-                        {skills.map((skill, i) => (
-                          <TooltipProvider key={i}>
+                        {skills.map((skill) => (
+                          <TooltipProvider key={`${message.id}-${skill}`}>
                             <Tooltip delayDuration={0}>
                               <TooltipTrigger asChild>
                                 <div className="flex items-center justify-center size-[34px] bg-primary/10 text-primary border border-primary/20 rounded-xl shrink-0">
@@ -235,7 +245,7 @@ const PurePreviewMessage = ({
                         ))}
                       </div>
                     )}
-                    
+
                     {(textContent.trim() || skills.length === 0) && (
                       <MessageContent
                         className={cn({

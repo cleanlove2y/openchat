@@ -1,5 +1,3 @@
-import { cn } from "@/lib/utils";
-
 export const BotIcon = () => {
   return (
     <svg
@@ -895,12 +893,15 @@ export const SparklesIcon = ({ size = 16 }: { size?: number }) => (
   </svg>
 );
 
-export const RegenerateSparkIcon = ({ size = 20, ...props }: { size?: number } & React.SVGProps<SVGSVGElement>) => (
+export const RegenerateSparkIcon = ({
+  size = 20,
+  ...props
+}: { size?: number } & React.SVGProps<SVGSVGElement>) => (
   <svg
-    width={size}
+    fill="none"
     height={size}
     viewBox="0 0 20 20"
-    fill="none"
+    width={size}
     xmlns="http://www.w3.org/2000/svg"
     {...props}
   >
@@ -912,19 +913,19 @@ export const RegenerateSparkIcon = ({ size = 20, ...props }: { size?: number } &
     </g>
     <defs>
       <linearGradient
+        gradientUnits="userSpaceOnUse"
         id="paint0_linear_10012_165935"
         x1="10"
-        y1="0"
         x2="10"
+        y1="0"
         y2="20"
-        gradientUnits="userSpaceOnUse"
       >
         <stop stopColor="#87A9FF" />
         <stop offset="0.44" stopColor="#A7B8EE" />
         <stop offset="0.88" stopColor="#F1DCC7" />
       </linearGradient>
       <clipPath id="clip0_10012_165935">
-        <rect width="20" height="20" fill="white" />
+        <rect fill="white" height="20" width="20" />
       </clipPath>
     </defs>
   </svg>

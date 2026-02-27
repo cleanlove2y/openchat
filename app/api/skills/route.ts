@@ -10,7 +10,7 @@ const appLogger = getAppLogger();
 const getHandler = async (_request: Request) => {
   try {
     const skills = await discoverSkillsFromEnvironment();
-    
+
     // In the future, we can add more slash commands (not just skills)
     // Map them to a standard format for the client
     const commands = skills.map((skill) => ({
@@ -34,9 +34,8 @@ const getHandler = async (_request: Request) => {
 };
 
 export const GET = createAuthedApiRoute({
-    route: "/api/skills",
-    method: "GET",
-    unauthorizedErrorCode: "unauthorized:api",
-    handler: ({ request }) => getHandler(request),
-  });
-
+  route: "/api/skills",
+  method: "GET",
+  unauthorizedErrorCode: "unauthorized:api",
+  handler: ({ request }) => getHandler(request),
+});

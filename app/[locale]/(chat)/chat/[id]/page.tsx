@@ -1,13 +1,12 @@
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
-
-import { auth } from "@/lib/server/auth/core";
 import { Chat } from "@/components/chat";
 import { DataStreamHandler } from "@/components/data-stream-handler";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { getChatById, getMessagesByChatId } from "@/lib/db/queries";
 import { isSupportedLocale, withLocalePath } from "@/lib/i18n/routing";
+import { auth } from "@/lib/server/auth/core";
 import { convertToUIMessages } from "@/lib/utils";
 
 export default function Page(props: {
@@ -98,4 +97,3 @@ async function ChatPage({
     </>
   );
 }
-

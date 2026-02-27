@@ -110,4 +110,3 @@ export function MessageEditor({
     </div>
   );
 }
-

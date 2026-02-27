@@ -1,6 +1,13 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { ArrowDownIcon } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useMessages } from "@/hooks/use-messages";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
@@ -200,7 +207,7 @@ function PureMessages({
     assistantHistoryRef.current = nextHistory;
   }, [messages]);
 
-  const setLatestVersionForUser = (userId: string) => {
+  const setLatestVersionForUser = useCallback((userId: string) => {
     const assistants = assistantHistoryRef.current[userId];
     if (!assistants || assistants.length === 0) {
       return;
@@ -214,7 +221,7 @@ function PureMessages({
 
       return { ...prev, [userId]: latestIndex };
     });
-  };
+  }, []);
 
   useEffect(() => {
     const prevStatus = prevStatusRef.current;
@@ -235,44 +242,58 @@ function PureMessages({
     }
 
     prevStatusRef.current = status;
-  }, [messages, status]);
+  }, [messages, setLatestVersionForUser, status]);
 
-  const renderMessage = (
-    message: ChatMessage,
-    overrideKey?: string,
-    currentVersion?: number,
-    totalVersions?: number,
-    onVersionChange?: (index: number) => void,
-    regenerateMessageId?: string
-  ) => {
-    const messageIndex = messageIndexById.get(message.id);
-    const isLastMessage = messageIndex === messages.length - 1;
-    const isLoading =
-      (status === "submitted" || status === "streaming") && isLastMessage;
+  const renderMessage = useCallback(
+    (
+      message: ChatMessage,
+      overrideKey?: string,
+      currentVersion?: number,
+      totalVersions?: number,
+      onVersionChange?: (index: number) => void,
+      regenerateMessageId?: string
+    ) => {
+      const messageIndex = messageIndexById.get(message.id);
+      const isLastMessage = messageIndex === messages.length - 1;
+      const isLoading =
+        (status === "submitted" || status === "streaming") && isLastMessage;
 
-    return (
-      <PreviewMessage
-        addToolApprovalResponse={addToolApprovalResponse}
-        chatId={chatId}
-        currentVersion={currentVersion}
-        isLoading={isLoading}
-        isReadonly={isReadonly}
-        key={overrideKey ?? message.id}
-        message={message}
-        onVersionChange={onVersionChange}
-        regenerate={regenerate}
-        regenerateMessageId={regenerateMessageId}
-        requiresScrollPadding={hasSentMessage && isLastMessage}
-        setMessages={setMessages}
-        totalVersions={totalVersions}
-        vote={
-          votes
-            ? votes.find((vote) => vote.messageId === message.id)
-            : undefined
-        }
-      />
-    );
-  };
+      return (
+        <PreviewMessage
+          addToolApprovalResponse={addToolApprovalResponse}
+          chatId={chatId}
+          currentVersion={currentVersion}
+          isLoading={isLoading}
+          isReadonly={isReadonly}
+          key={overrideKey ?? message.id}
+          message={message}
+          onVersionChange={onVersionChange}
+          regenerate={regenerate}
+          regenerateMessageId={regenerateMessageId}
+          requiresScrollPadding={hasSentMessage && isLastMessage}
+          setMessages={setMessages}
+          totalVersions={totalVersions}
+          vote={
+            votes
+              ? votes.find((vote) => vote.messageId === message.id)
+              : undefined
+          }
+        />
+      );
+    },
+    [
+      addToolApprovalResponse,
+      chatId,
+      hasSentMessage,
+      isReadonly,
+      messageIndexById,
+      messages.length,
+      regenerate,
+      setMessages,
+      status,
+      votes,
+    ]
+  );
 
   const messageNodes = useMemo(() => {
     const nodes: ReactNode[] = [];
@@ -341,20 +362,7 @@ function PureMessages({
     }
 
     return nodes;
-  }, [
-    messages,
-    votes,
-    status,
-    isReadonly,
-    addToolApprovalResponse,
-    chatId,
-    regenerate,
-    hasSentMessage,
-    setMessages,
-    activeMessageVersions,
-    activeUserId,
-    messageIndexById,
-  ]);
+  }, [activeMessageVersions, activeUserId, messages, renderMessage, status]);
 
   return (
     <div className="relative flex-1 bg-background">

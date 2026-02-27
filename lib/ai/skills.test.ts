@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -42,14 +42,18 @@ async function createSandbox(): Promise<Sandbox> {
   process.env.SKILLS_MAX_COUNT = "200";
   process.env.SKILLS_CACHE_TTL_MS = "1";
   process.env.SKILLS_LOAD_TIMEOUT_MS = "500";
-  delete process.env.SKILLS_RUNTIME_CONFIG_JSON;
-  delete process.env.SKILLS_DIRS;
+  process.env.SKILLS_RUNTIME_CONFIG_JSON = undefined;
+  process.env.SKILLS_DIRS = undefined;
 
   resetSkillsRuntimeForTests();
   return { root, workspaceDir, userDir, bundledDir };
 }
 
-async function writeSkill(root: string, dirName: string, content: string): Promise<void> {
+async function writeSkill(
+  root: string,
+  dirName: string,
+  content: string
+): Promise<void> {
   const dir = join(root, dirName);
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, "SKILL.md"), content, "utf8");
@@ -62,7 +66,8 @@ async function cleanupSandbox(root: string): Promise<void> {
 }
 
 test("parseSkillFrontmatter parses required fields", () => {
-  const input = `---\nname: intent-router\ndescription: Route user intent\n---\n# Body`;
+  const input =
+    "---\nname: intent-router\ndescription: Route user intent\n---\n# Body";
   const parsed = parseSkillFrontmatter(input);
 
   assert.equal(parsed.name, "intent-router");
@@ -70,7 +75,8 @@ test("parseSkillFrontmatter parses required fields", () => {
 });
 
 test("stripFrontmatter removes yaml header", () => {
-  const input = `---\nname: intent-router\ndescription: Route user intent\n---\n\n# Instructions\nUse me.`;
+  const input =
+    "---\nname: intent-router\ndescription: Route user intent\n---\n\n# Instructions\nUse me.";
   const body = stripFrontmatter(input);
   assert.equal(body, "# Instructions\nUse me.");
 });
@@ -81,17 +87,17 @@ test("workspace overrides user and bundled by skill name", async () => {
     await writeSkill(
       sandbox.bundledDir,
       "resume-polisher",
-      `---\nname: Resume Polisher\ndescription: bundled\n---\nBundled body`
+      "---\nname: Resume Polisher\ndescription: bundled\n---\nBundled body"
     );
     await writeSkill(
       sandbox.userDir,
       "resume-polisher",
-      `---\nname: Resume Polisher\ndescription: user\n---\nUser body`
+      "---\nname: Resume Polisher\ndescription: user\n---\nUser body"
     );
     await writeSkill(
       sandbox.workspaceDir,
       "resume-polisher",
-      `---\nname: Resume Polisher\ndescription: workspace\n---\nWorkspace body`
+      "---\nname: Resume Polisher\ndescription: workspace\n---\nWorkspace body"
     );
 
     const snapshot = await getSkillsSnapshot(getSkillsConfig(sandbox.root));
@@ -135,12 +141,12 @@ test("enforces SKILLS_MAX_COUNT", async () => {
     await writeSkill(
       sandbox.workspaceDir,
       "skill-a",
-      `---\nname: Skill A\ndescription: a\n---\na`
+      "---\nname: Skill A\ndescription: a\n---\na"
     );
     await writeSkill(
       sandbox.workspaceDir,
       "skill-b",
-      `---\nname: Skill B\ndescription: b\n---\nb`
+      "---\nname: Skill B\ndescription: b\n---\nb"
     );
 
     const snapshot = await getSkillsSnapshot(getSkillsConfig(sandbox.root));
@@ -157,8 +163,10 @@ test("enforces SKILLS_MAX_COUNT", async () => {
 test("applies metadata.openchat.requires env/bins/config gating", async () => {
   const sandbox = await createSandbox();
   try {
-    process.env.SKILLS_RUNTIME_CONFIG_JSON = JSON.stringify({ flow: { mode: "strict" } });
-    delete process.env.OPENAI_API_KEY;
+    process.env.SKILLS_RUNTIME_CONFIG_JSON = JSON.stringify({
+      flow: { mode: "strict" },
+    });
+    process.env.OPENAI_API_KEY = undefined;
     resetSkillsRuntimeForTests();
 
     await writeSkill(
@@ -218,11 +226,26 @@ body`
     );
 
     const snapshot = await getSkillsSnapshot(getSkillsConfig(sandbox.root));
-    assert.equal(snapshot.skills.some((s) => s.name === "Needs Config"), true);
-    assert.equal(snapshot.skills.some((s) => s.name === "Needs Env"), false);
-    assert.equal(snapshot.skills.some((s) => s.name === "Needs Bin"), false);
-    assert.equal(snapshot.skills.some((s) => s.name === "Config Miss"), false);
-    assert.equal(snapshot.errors.some((e) => e.code === "skill_gated"), true);
+    assert.equal(
+      snapshot.skills.some((s) => s.name === "Needs Config"),
+      true
+    );
+    assert.equal(
+      snapshot.skills.some((s) => s.name === "Needs Env"),
+      false
+    );
+    assert.equal(
+      snapshot.skills.some((s) => s.name === "Needs Bin"),
+      false
+    );
+    assert.equal(
+      snapshot.skills.some((s) => s.name === "Config Miss"),
+      false
+    );
+    assert.equal(
+      snapshot.errors.some((e) => e.code === "skill_gated"),
+      true
+    );
   } finally {
     await cleanupSandbox(sandbox.root);
   }
@@ -234,12 +257,16 @@ test("loadSkillByName returns body only (progressive disclosure)", async () => {
     await writeSkill(
       sandbox.workspaceDir,
       "intent-router",
-      `---\nname: intent-router\ndescription: route\n---\n\n# Intent Router\nRead user intent.`
+      "---\nname: intent-router\ndescription: route\n---\n\n# Intent Router\nRead user intent."
     );
 
     const config = getSkillsConfig(sandbox.root);
     const snapshot = await getSkillsSnapshot(config);
-    const loaded = await loadSkillByName(snapshot.skills, "intent-router", config);
+    const loaded = await loadSkillByName(
+      snapshot.skills,
+      "intent-router",
+      config
+    );
 
     assert.ok(loaded);
     assert.equal(loaded?.name, "intent-router");
@@ -275,8 +302,8 @@ test("buildSkillsSystemPrompt enforces canonical loadSkill tool naming", () => {
 
 test("ENABLE_SKILLS defaults to true and SKILLS_DIRS is ignored", () => {
   process.env = { ...ORIGINAL_ENV };
-  delete process.env.ENABLE_SKILLS;
-  delete process.env.SKILLS_WORKSPACE_DIRS;
+  process.env.ENABLE_SKILLS = undefined;
+  process.env.SKILLS_WORKSPACE_DIRS = undefined;
   process.env.SKILLS_DIRS = "deprecated-path";
 
   const config = getSkillsConfig();
@@ -315,7 +342,7 @@ test("missing optional skill roots are treated as empty sources", async () => {
     await writeSkill(
       workspaceDir,
       "valid-workspace-skill",
-      `---\nname: Workspace Skill\ndescription: valid\n---\nbody`
+      "---\nname: Workspace Skill\ndescription: valid\n---\nbody"
     );
 
     const snapshot = await getSkillsSnapshot(getSkillsConfig(root));

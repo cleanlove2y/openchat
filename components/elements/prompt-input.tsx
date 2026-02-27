@@ -2,11 +2,7 @@
 
 import type { ChatStatus } from "ai";
 import { Loader2Icon, SendIcon, SquareIcon, XIcon } from "lucide-react";
-import type {
-  ComponentProps,
-  HTMLAttributes,
-  KeyboardEvent,
-} from "react";
+import type { ComponentProps, HTMLAttributes, KeyboardEvent } from "react";
 import { Children } from "react";
 import { Button } from "@/components/ui/button";
 import {

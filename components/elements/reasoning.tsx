@@ -2,7 +2,6 @@
 
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import { ChevronDownIcon, SparklesIcon } from "lucide-react";
-import { RegenerateSparkIcon } from "../icons";
 import type { ComponentProps } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import {
@@ -12,6 +11,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { cn } from "@/lib/utils";
+import { RegenerateSparkIcon } from "../icons";
 import { Response } from "./response";
 
 type ReasoningContextValue = {
@@ -114,7 +114,9 @@ export const Reasoning = memo(
               )}
               {isStreaming ? (
                 <>
-                  <span className="font-medium text-foreground/90">Thinking</span>
+                  <span className="font-medium text-foreground/90">
+                    Thinking
+                  </span>
                   <ThinkingIndicator
                     className="text-blue-400"
                     dotClassName="bg-blue-400"

@@ -11,7 +11,7 @@ const BASE_URL = process.env.SKILLS_TEST_BASE_URL ?? "http://localhost:3000";
 const SKILL_NAME = process.env.SKILLS_TEST_SKILL_NAME ?? "Regression Skill API";
 const PROMPT_TEMPLATE =
   process.env.SKILLS_TEST_PROMPT ??
-  "Call the tool `loadSkill` exactly once with skill name \"{skillName}\". After the tool call, reply with exactly: loaded";
+  'Call the tool `loadSkill` exactly once with skill name "{skillName}". After the tool call, reply with exactly: loaded';
 const SKILL_DIR = join(process.cwd(), "agent-skills", "regression-skill-api");
 const SKILL_FILE = join(SKILL_DIR, "SKILL.md");
 
@@ -80,7 +80,9 @@ async function followRedirects(url: string, jar: CookieJar): Promise<Response> {
 
     const location = response.headers.get("location");
     if (!location) {
-      throw new Error(`Redirect response missing location header: ${response.status}`);
+      throw new Error(
+        `Redirect response missing location header: ${response.status}`
+      );
     }
     currentUrl = new URL(location, currentUrl).toString();
   }
@@ -88,7 +90,10 @@ async function followRedirects(url: string, jar: CookieJar): Promise<Response> {
   throw new Error("Too many redirects while creating guest session");
 }
 
-function parseRegressionResult(response: Response, sse: string): ChatRegressionResult {
+function parseRegressionResult(
+  response: Response,
+  sse: string
+): ChatRegressionResult {
   return {
     status: response.status,
     hasLoadSkill: sse.includes('"toolName":"loadSkill"'),
@@ -117,7 +122,9 @@ Use this skill content normally when loaded.
     jar
   );
   if (!guestResponse.ok) {
-    throw new Error(`Guest session creation failed with status ${guestResponse.status}`);
+    throw new Error(
+      `Guest session creation failed with status ${guestResponse.status}`
+    );
   }
 
   const prompt = PROMPT_TEMPLATE.replaceAll("{skillName}", SKILL_NAME);
@@ -162,23 +169,30 @@ Use this skill content normally when loaded.
   }
 
   if (!result.hasLoadSkill) {
-    throw new Error("Expected loadSkill tool call was not found in SSE response");
+    throw new Error(
+      "Expected loadSkill tool call was not found in SSE response"
+    );
   }
 
   if (result.hasGetWeather) {
-    throw new Error("Unexpected getWeather tool call was found in SSE response");
+    throw new Error(
+      "Unexpected getWeather tool call was found in SSE response"
+    );
   }
 }
 
-run().catch((error) => {
-  console.error(error);
-  process.exit(1);
-}).finally(async () => {
-  try {
-    await rm(SKILL_DIR, { recursive: true, force: true });
-  } catch {
-    // ignore cleanup errors
-  }
-});
+run()
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  })
+  .finally(async () => {
+    try {
+      await rm(SKILL_DIR, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+  });
+
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";

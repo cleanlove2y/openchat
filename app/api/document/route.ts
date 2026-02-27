@@ -1,13 +1,13 @@
 import {
+  type AuthenticatedSession,
+  createAuthedApiRoute,
+} from "@/app/api/_shared/authed-route";
+import {
   deleteDocumentsByIdAfterTimestamp,
   getDocumentsById,
   saveDocument,
 } from "@/lib/db/queries";
 import { OpenChatError } from "@/lib/errors";
-import {
-  type AuthenticatedSession,
-  createAuthedApiRoute,
-} from "@/app/api/_shared/authed-route";
 import {
   type DocumentDeleteInput,
   type DocumentIdQueryInput,
@@ -97,65 +97,64 @@ const deleteHandler = async ({
 };
 
 export const GET = createAuthedApiRoute<DocumentIdQueryInput>({
-    route: "/api/document",
-    method: "GET",
-    unauthorizedErrorCode: "unauthorized:document",
-    badRequestErrorCode: "bad_request:api",
-    parseRequest: parseDocumentIdRequest,
-    handler: getHandler,
-  });
+  route: "/api/document",
+  method: "GET",
+  unauthorizedErrorCode: "unauthorized:document",
+  badRequestErrorCode: "bad_request:api",
+  parseRequest: parseDocumentIdRequest,
+  handler: getHandler,
+});
 
 export const POST = createAuthedApiRoute<DocumentPostInput>({
-    route: "/api/document",
-    method: "POST",
-    unauthorizedErrorCode: "not_found:document",
-    badRequestErrorCode: "bad_request:api",
-    parseRequest: parseDocumentPostRequest,
-    audit: {
-      action: "document.save",
-      resourceType: "document",
-      getResourceId: (requestForAudit) =>
-        new URL(requestForAudit.url).searchParams.get("id") ?? undefined,
-      getMetadata: async (requestForAudit) => {
-        try {
-          const body = (await requestForAudit.json()) as {
-            kind?: unknown;
-            title?: unknown;
-          };
+  route: "/api/document",
+  method: "POST",
+  unauthorizedErrorCode: "not_found:document",
+  badRequestErrorCode: "bad_request:api",
+  parseRequest: parseDocumentPostRequest,
+  audit: {
+    action: "document.save",
+    resourceType: "document",
+    getResourceId: (requestForAudit) =>
+      new URL(requestForAudit.url).searchParams.get("id") ?? undefined,
+    getMetadata: async (requestForAudit) => {
+      try {
+        const body = (await requestForAudit.json()) as {
+          kind?: unknown;
+          title?: unknown;
+        };
 
-          return {
-            kind: typeof body.kind === "string" ? body.kind : null,
-            title:
-              typeof body.title === "string"
-                ? { length: body.title.length }
-                : null,
-          };
-        } catch (_) {
-          return undefined;
-        }
-      },
+        return {
+          kind: typeof body.kind === "string" ? body.kind : null,
+          title:
+            typeof body.title === "string"
+              ? { length: body.title.length }
+              : null,
+        };
+      } catch (_) {
+        return undefined;
+      }
     },
-    handler: postHandler,
-  });
+  },
+  handler: postHandler,
+});
 
 export const DELETE = createAuthedApiRoute<DocumentDeleteInput>({
-    route: "/api/document",
-    method: "DELETE",
-    unauthorizedErrorCode: "unauthorized:document",
-    badRequestErrorCode: "bad_request:api",
-    parseRequest: parseDocumentDeleteRequest,
-    audit: {
-      action: "document.delete_after",
-      resourceType: "document",
-      getResourceId: (requestForAudit) =>
-        new URL(requestForAudit.url).searchParams.get("id") ?? undefined,
-      getMetadata: (requestForAudit) => {
-        const searchParams = new URL(requestForAudit.url).searchParams;
-        return {
-          timestamp: searchParams.get("timestamp"),
-        };
-      },
+  route: "/api/document",
+  method: "DELETE",
+  unauthorizedErrorCode: "unauthorized:document",
+  badRequestErrorCode: "bad_request:api",
+  parseRequest: parseDocumentDeleteRequest,
+  audit: {
+    action: "document.delete_after",
+    resourceType: "document",
+    getResourceId: (requestForAudit) =>
+      new URL(requestForAudit.url).searchParams.get("id") ?? undefined,
+    getMetadata: (requestForAudit) => {
+      const searchParams = new URL(requestForAudit.url).searchParams;
+      return {
+        timestamp: searchParams.get("timestamp"),
+      };
     },
-    handler: deleteHandler,
-  });
-
+  },
+  handler: deleteHandler,
+});

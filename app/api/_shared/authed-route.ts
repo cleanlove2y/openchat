@@ -1,9 +1,9 @@
 import type { Session } from "next-auth";
-import type { UserType } from "@/lib/server/auth/core";
 import {
   createApiRoute,
   type RouteFactoryOptions,
 } from "@/lib/logging/route-factory";
+import type { UserType } from "@/lib/server/auth/core";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -38,4 +38,3 @@ async function defaultGetSession(): Promise<AuthenticatedSession | null> {
   const { auth } = await import("@/lib/server/auth/core");
   return (await auth()) as AuthenticatedSession | null;
 }
-

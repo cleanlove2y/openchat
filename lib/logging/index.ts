@@ -235,7 +235,10 @@ function createDestination(
 }
 
 function closeDestination(destination: pino.DestinationStream): void {
-  if ("flushSync" in destination && typeof destination.flushSync === "function") {
+  if (
+    "flushSync" in destination &&
+    typeof destination.flushSync === "function"
+  ) {
     destination.flushSync();
   }
   if ("end" in destination && typeof destination.end === "function") {
@@ -457,7 +460,10 @@ function sanitizeUnknownValue(key: string, value: unknown, depth = 0): unknown {
 
   if (typeof value === "object") {
     const result: Record<string, unknown> = {};
-    const entries = Object.entries(value as Record<string, unknown>).slice(0, 50);
+    const entries = Object.entries(value as Record<string, unknown>).slice(
+      0,
+      50
+    );
 
     for (const [entryKey, entryValue] of entries) {
       result[entryKey] = sanitizeUnknownValue(entryKey, entryValue, depth + 1);
@@ -697,7 +703,10 @@ function resolveRoute(request: Request, configuredRoute: string): string {
   }
 }
 
-function attachRequestIdHeader(response: Response, requestId: string): Response {
+function attachRequestIdHeader(
+  response: Response,
+  requestId: string
+): Response {
   if (response.headers.get("x-request-id")) {
     return response;
   }
@@ -711,7 +720,10 @@ function attachRequestIdHeader(response: Response, requestId: string): Response 
   });
 }
 
-function sanitizeString(key: string, value: string): string | Record<string, unknown> {
+function sanitizeString(
+  key: string,
+  value: string
+): string | Record<string, unknown> {
   if (SENSITIVE_KEY_PATTERN.test(key)) {
     return {
       redacted: true,
@@ -897,7 +909,7 @@ export function withRouteLogging<TArgs extends unknown[]>(
   options: RouteLoggingOptions<TArgs>,
   handler: RouteHandler<TArgs>
 ): RouteHandler<TArgs> {
-  return async (request: Request, ...args: TArgs): Promise<Response> => {
+  return (request: Request, ...args: TArgs): Promise<Response> => {
     const config = getConfig();
     const startedAt = Date.now();
     const method = options.method ?? request.method;
@@ -907,7 +919,9 @@ export function withRouteLogging<TArgs extends unknown[]>(
     const userAgent = request.headers.get("user-agent");
 
     const requestForAudit = options.audit ? request.clone() : request;
-    const requestForDetails = config.logHttpRequestBody ? request.clone() : null;
+    const requestForDetails = config.logHttpRequestBody
+      ? request.clone()
+      : null;
 
     return runWithRequestContext(
       {
@@ -994,7 +1008,11 @@ export function withRouteLogging<TArgs extends unknown[]>(
 
             if (options.audit) {
               const details = shouldResolveAuditDetails(statusCode)
-                ? await resolveAuditDetails(options.audit, requestForAudit, args)
+                ? await resolveAuditDetails(
+                    options.audit,
+                    requestForAudit,
+                    args
+                  )
                 : {};
               writeAuditLog({
                 action: options.audit.action,

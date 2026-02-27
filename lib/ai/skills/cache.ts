@@ -32,7 +32,9 @@ async function buildSnapshot(config: SkillsConfig): Promise<SkillsSnapshot> {
   return snapshot;
 }
 
-export async function getSkillsSnapshot(config: SkillsConfig): Promise<SkillsSnapshot> {
+export function getSkillsSnapshot(
+  config: SkillsConfig
+): Promise<SkillsSnapshot> {
   const fingerprint = fingerprintConfig(config);
   const now = Date.now();
 

@@ -76,10 +76,15 @@ export function getSkillsConfig(cwd = process.cwd()): SkillsConfig {
 
   const workspaceDirs = parseDirs(process.env.SKILLS_WORKSPACE_DIRS, [
     "agent-skills",
-  ]).map((dir) => resolveDir(cwd, dir)).filter(Boolean) as string[];
+  ])
+    .map((dir) => resolveDir(cwd, dir))
+    .filter(Boolean) as string[];
 
   const userDefault = isVercel ? null : join(homedir(), ".openchat", "skills");
-  const userDir = resolveDir(cwd, process.env.SKILLS_USER_DIR?.trim() || userDefault);
+  const userDir = resolveDir(
+    cwd,
+    process.env.SKILLS_USER_DIR?.trim() || userDefault
+  );
   const bundledDir = resolveDir(
     cwd,
     process.env.SKILLS_BUNDLED_DIR?.trim() || "skills/bundled"
@@ -117,7 +122,9 @@ export function resolveSkillSourceRoots(config: SkillsConfig): Array<{
     path,
   }));
 
-  const userRoot = config.userDir ? [{ source: "user" as const, path: config.userDir }] : [];
+  const userRoot = config.userDir
+    ? [{ source: "user" as const, path: config.userDir }]
+    : [];
   const bundledRoot = config.bundledDir
     ? [{ source: "bundled" as const, path: config.bundledDir }]
     : [];

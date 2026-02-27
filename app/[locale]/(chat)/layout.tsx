@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
 import Script from "next/script";
 import { Suspense } from "react";
-import { auth } from "@/lib/server/auth/core";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DataStreamProvider } from "@/components/data-stream-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { auth } from "@/lib/server/auth/core";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -33,4 +33,3 @@ async function SidebarWrapper({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
-

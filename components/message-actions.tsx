@@ -262,7 +262,7 @@ export function PureMessageActions({
           onClick={handleRegenerate}
           tooltip="Regenerate"
         >
-          <RegenerateSparkIcon/>
+          <RegenerateSparkIcon />
         </MessageActionButton>
       )}
 

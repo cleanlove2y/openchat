@@ -127,4 +127,3 @@ export const register = async (
     return { status: "failed" };
   }
 };
-
