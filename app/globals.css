@@ -316,3 +316,21 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes thinking-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.32;
+    filter: brightness(0.88) saturate(0.92);
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  50% {
+    opacity: 1;
+    filter: brightness(1.22) saturate(1.08);
+    box-shadow: 0 0 8px 0 currentColor;
+  }
+}
+
+.thinking-dot {
+  will-change: opacity, filter, box-shadow;
+}

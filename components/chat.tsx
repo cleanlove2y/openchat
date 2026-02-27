@@ -121,16 +121,21 @@ export function Chat({
               );
             })
           );
+        const isRegenerateFlow = request.trigger === "regenerate-message";
+        const shouldSendFullMessages =
+          isToolApprovalContinuation || isRegenerateFlow;
 
         return {
           body: {
             id: request.id,
-            ...(isToolApprovalContinuation
+            ...(shouldSendFullMessages
               ? { messages: request.messages }
               : { message: lastMessage }),
             selectedChatModel: currentModelIdRef.current,
             selectedVisibilityType: visibilityType,
             ...request.body,
+            trigger: request.trigger,
+            messageId: request.messageId,
           },
         };
       },

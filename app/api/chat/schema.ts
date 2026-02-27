@@ -29,9 +29,11 @@ const messageSchema = z.object({
 
 export const postRequestBodySchema = z.object({
   id: z.string().uuid(),
-  // Either a single new message or all messages (for tool approvals)
+  // Either a single new message or all messages (for regenerate/tool flows)
   message: userMessageSchema.optional(),
   messages: z.array(messageSchema).optional(),
+  trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
+  messageId: z.string().uuid().optional(),
   selectedChatModel: z.string(),
   selectedVisibilityType: z.enum(["public", "private"]),
 });

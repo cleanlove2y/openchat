@@ -16,6 +16,7 @@ import {
   createAuthedApiRoute,
 } from "@/app/api/_shared/authed-route";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import { isReasoningModelId } from "@/lib/ai/models";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
 import {
@@ -36,9 +37,11 @@ import { updateDocument } from "@/lib/ai/tools/update-document";
 import { isProductionEnvironment } from "@/lib/constants";
 import {
   createStreamId,
+  deleteMessagesByChatIdAfterTimestamp,
   deleteChatById,
   getChatById,
   getMessageCountByUserId,
+  getMessageById,
   getMessagesByChatId,
   saveChat,
   saveMessages,
@@ -134,6 +137,36 @@ function buildExplicitSkillsSystemPrompt(
   ].join("\n\n");
 }
 
+function trimMessagesForRegenerate({
+  messages,
+  messageId,
+}: {
+  messages: ChatMessage[];
+  messageId?: string;
+}) {
+  if (!messageId) {
+    return messages;
+  }
+
+  const messageIndex = messages.findIndex(
+    (currentMessage) => currentMessage.id === messageId
+  );
+
+  if (messageIndex === -1) {
+    throw new OpenChatError(
+      "bad_request:api",
+      `Regenerate target message not found: ${messageId}`
+    );
+  }
+
+  const targetMessage = messages[messageIndex];
+
+  return messages.slice(
+    0,
+    targetMessage.role === "assistant" ? messageIndex : messageIndex + 1
+  );
+}
+
 const postHandler = async ({
   request,
   session,
@@ -143,8 +176,15 @@ const postHandler = async ({
   session: AuthenticatedSession;
   input: PostRequestBody;
 }) => {
-  const { id, message, messages, selectedChatModel, selectedVisibilityType } =
-    input;
+  const {
+    id,
+    message,
+    messages,
+    trigger,
+    messageId,
+    selectedChatModel,
+    selectedVisibilityType,
+  } = input;
 
   const userType: UserType = session.user.type;
 
@@ -157,7 +197,8 @@ const postHandler = async ({
     return new OpenChatError("rate_limit:chat").toResponse();
   }
 
-  const isToolApprovalFlow = Boolean(messages);
+  const isMessagesFlow = Array.isArray(messages);
+  const isRegenerateFlow = trigger === "regenerate-message";
 
   const chat = await getChatById({ id });
   let messagesFromDb: DBMessage[] = [];
@@ -167,7 +208,7 @@ const postHandler = async ({
     if (chat.userId !== session.user.id) {
       return new OpenChatError("forbidden:chat").toResponse();
     }
-    if (!isToolApprovalFlow) {
+    if (!isMessagesFlow) {
       messagesFromDb = await getMessagesByChatId({ id });
     }
   } else if (message?.role === "user") {
@@ -180,9 +221,17 @@ const postHandler = async ({
     titlePromise = generateTitleFromUserMessage({ message });
   }
 
-  const uiMessages = isToolApprovalFlow
+  const dbMessagesAsUi = convertToUIMessages(messagesFromDb);
+  let uiMessages = isMessagesFlow
     ? (messages as ChatMessage[])
-    : [...convertToUIMessages(messagesFromDb), message as ChatMessage];
+    : message
+      ? [...dbMessagesAsUi, message as ChatMessage]
+      : dbMessagesAsUi;
+
+  if (isRegenerateFlow) {
+    uiMessages = trimMessagesForRegenerate({ messages: uiMessages, messageId });
+  }
+
   const modelUiMessages = sanitizeUserSkillDirectivesForModel(uiMessages);
   const requestedSkillNames = collectSkillDirectiveNamesFromRequestBody({
     message,
@@ -199,23 +248,32 @@ const postHandler = async ({
   };
 
   if (message?.role === "user") {
-    await saveMessages({
-      messages: [
-        {
-          chatId: id,
-          id: message.id,
-          role: "user",
-          parts: message.parts,
-          attachments: [],
-          createdAt: new Date(),
-        },
-      ],
-    });
+    const messageAlreadyExists = messagesFromDb.some(
+      (storedMessage) => storedMessage.id === message.id
+    );
+
+    if (messageAlreadyExists) {
+      await updateMessage({
+        id: message.id,
+        parts: message.parts,
+      });
+    } else {
+      await saveMessages({
+        messages: [
+          {
+            chatId: id,
+            id: message.id,
+            role: "user",
+            parts: message.parts,
+            attachments: [],
+            createdAt: new Date(),
+          },
+        ],
+      });
+    }
   }
 
-  const isReasoningModel =
-    selectedChatModel.includes("reasoning") ||
-    selectedChatModel.includes("thinking");
+  const isReasoningModel = isReasoningModelId(selectedChatModel);
 
   const modelMessages = await convertToModelMessages(modelUiMessages);
   const skillsConfig = getSkillsConfig();
@@ -372,7 +430,7 @@ const postHandler = async ({
   }
 
   const stream = createUIMessageStream({
-    originalMessages: isToolApprovalFlow ? uiMessages : undefined,
+    originalMessages: isMessagesFlow ? uiMessages : undefined,
     execute: async ({ writer: dataStream }) => {
       const result = streamText({
         model: getLanguageModel(selectedChatModel),
@@ -411,7 +469,18 @@ const postHandler = async ({
     },
     generateId: generateUUID,
     onFinish: async ({ messages: finishedMessages }) => {
-      if (isToolApprovalFlow) {
+      if (isRegenerateFlow && messageId) {
+        const [regenerateFromMessage] = await getMessageById({ id: messageId });
+
+        if (regenerateFromMessage?.chatId === id) {
+          await deleteMessagesByChatIdAfterTimestamp({
+            chatId: id,
+            timestamp: regenerateFromMessage.createdAt,
+          });
+        }
+      }
+
+      if (isMessagesFlow) {
         for (const finishedMsg of finishedMessages) {
           const existingMsg = uiMessages.find((m) => m.id === finishedMsg.id);
           if (existingMsg) {
@@ -557,6 +626,8 @@ const chatSubmitAudit = {
         selectedVisibilityType?: unknown;
         message?: unknown;
         messages?: unknown;
+        trigger?: unknown;
+        messageId?: unknown;
       };
       const requestedSkillNames = collectSkillDirectiveNamesFromRequestBody({
         message: body.message,
@@ -572,7 +643,11 @@ const chatSubmitAudit = {
           typeof body.selectedVisibilityType === "string"
             ? body.selectedVisibilityType
             : null,
-        isToolApprovalFlow: Array.isArray(body.messages),
+        trigger: typeof body.trigger === "string" ? body.trigger : null,
+        messageId: typeof body.messageId === "string" ? body.messageId : null,
+        isRegenerateFlow: body.trigger === "regenerate-message",
+        isToolApprovalFlow:
+          Array.isArray(body.messages) && body.trigger !== "regenerate-message",
         requestedSkillNames,
         requestedSkillCount: requestedSkillNames.length,
       };

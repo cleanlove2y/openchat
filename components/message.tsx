@@ -4,13 +4,14 @@ import { useState } from "react";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
 import { cn, sanitizeText } from "@/lib/utils";
-import { WrenchIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, WrenchIcon } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { useDataStream } from "./data-stream-provider";
 import { DocumentToolResult } from "./document";
 import { DocumentPreview } from "./document-preview";
@@ -23,7 +24,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "./elements/tool";
-import { SparklesIcon } from "./icons";
+import { RegenerateSparkIcon, SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { MessageEditor } from "./message-editor";
 import { MessageReasoning } from "./message-reasoning";
@@ -40,6 +41,10 @@ const PurePreviewMessage = ({
   regenerate,
   isReadonly,
   requiresScrollPadding: _requiresScrollPadding,
+  currentVersion,
+  totalVersions,
+  onVersionChange,
+  regenerateMessageId,
 }: {
   addToolApprovalResponse: UseChatHelpers<ChatMessage>["addToolApprovalResponse"];
   chatId: string;
@@ -50,12 +55,37 @@ const PurePreviewMessage = ({
   regenerate: UseChatHelpers<ChatMessage>["regenerate"];
   isReadonly: boolean;
   requiresScrollPadding: boolean;
+  currentVersion?: number;
+  totalVersions?: number;
+  onVersionChange?: (index: number) => void;
+  regenerateMessageId?: string;
 }) => {
   const [mode, setMode] = useState<"view" | "edit">("view");
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
 
-  const attachmentsFromMessage = message.parts.filter(
+  const messageParts = message.parts ?? [];
+  const attachmentsFromMessage = messageParts.filter(
     (part) => part.type === "file"
   );
+  const hasTextParts = messageParts.some(
+    (part) => part.type === "text" && part.text?.trim()
+  );
+  const hasToolParts = messageParts.some((part) => part.type.startsWith("tool-"));
+  const hasReasoningParts = messageParts.some(
+    (part) =>
+      part.type === "reasoning" &&
+      (part.text?.trim() ||
+        ("state" in part && part.state === "streaming"))
+  );
+  const hasVisibleContent =
+    hasTextParts ||
+    hasToolParts ||
+    hasReasoningParts ||
+    attachmentsFromMessage.length > 0;
+  const shouldShowEmptyCursor =
+    message.role === "assistant" &&
+    isLoading &&
+    (messageParts.length === 0 || !hasVisibleContent);
 
   useDataStream();
 
@@ -78,21 +108,62 @@ const PurePreviewMessage = ({
         )}
 
         <div
-          className={cn("flex flex-col", {
-            "gap-2 md:gap-4": message.parts?.some(
-              (p) => p.type === "text" && p.text?.trim()
-            ),
+          className={cn("relative flex flex-col", {
+            "gap-2 md:gap-4": hasTextParts,
             "w-full":
               (message.role === "assistant" &&
-                (message.parts?.some(
-                  (p) => p.type === "text" && p.text?.trim()
-                ) ||
-                  message.parts?.some((p) => p.type.startsWith("tool-")))) ||
+                (hasTextParts || hasToolParts || hasReasoningParts)) ||
               mode === "edit",
             "max-w-[calc(100%-2.5rem)] sm:max-w-[min(fit-content,80%)]":
               message.role === "user" && mode !== "edit",
+            "rounded-xl border border-transparent p-4 transition-colors hover:border-border":
+              message.role === "assistant" && hasVisibleContent,
+            "p-0":
+              !(message.role === "assistant" && hasVisibleContent) &&
+              !shouldShowEmptyCursor,
+            "p-4": shouldShowEmptyCursor,
           })}
         >
+          {!isReadonly &&
+            message.role === "assistant" &&
+            !isLoading &&
+            hasVisibleContent && (
+              <div className="pointer-events-none sticky top-[calc(3.5rem+0.5rem)] z-20 flex h-0 w-full items-start justify-end overflow-visible">
+                <div
+                  className={cn(
+                    "pointer-events-auto mr-4 -translate-y-[90%] rounded-md border bg-background p-1 shadow-sm transition-opacity dark:bg-zinc-800",
+                    {
+                      "opacity-0 group-focus-within/message:opacity-100 group-hover/message:opacity-100":
+                        !isActionMenuOpen,
+                      "opacity-100": isActionMenuOpen,
+                    }
+                  )}
+                >
+                  <MessageActions
+                    chatId={chatId}
+                    isLoading={isLoading}
+                    key={`action-${message.id}`}
+                    message={message}
+                    regenerate={regenerate}
+                    regenerateMessageId={regenerateMessageId}
+                    setIsActionMenuOpen={setIsActionMenuOpen}
+                    setMode={setMode}
+                    vote={vote}
+                  />
+                </div>
+              </div>
+            )}
+
+          {shouldShowEmptyCursor && (
+            <div className="not-prose flex w-full flex-col overflow-hidden rounded-lg border border-border/50 bg-[#121212] text-sm transition-all pointer-events-none mb-2 mt-2">
+              <div className="flex items-center gap-2 px-3 py-2.5">
+                <RegenerateSparkIcon className="size-4 animate-spin text-blue-400" />
+                <span className="font-medium text-foreground/90">Thinking</span>
+                <ThinkingIndicator className="text-blue-400" dotClassName="bg-blue-400" />
+              </div>
+            </div>
+          )}
+
           {attachmentsFromMessage.length > 0 && (
             <div
               className="flex flex-row justify-end gap-2"
@@ -111,7 +182,7 @@ const PurePreviewMessage = ({
             </div>
           )}
 
-          {message.parts?.map((part, index) => {
+          {messageParts.map((part, index) => {
             const { type } = part;
             const key = `message-${message.id}-part-${index}`;
 
@@ -121,7 +192,7 @@ const PurePreviewMessage = ({
               if (hasContent || isStreaming) {
                 return (
                   <MessageReasoning
-                    isLoading={isLoading || isStreaming}
+                    isLoading={isStreaming}
                     key={key}
                     reasoning={part.text || ""}
                   />
@@ -386,7 +457,43 @@ const PurePreviewMessage = ({
             return null;
           })}
 
-          {!isReadonly && (
+          {message.role === "assistant" &&
+            totalVersions !== undefined &&
+            totalVersions > 1 && (
+              <div className="flex items-center gap-1 pt-2">
+                <button
+                  className="rounded-md p-1 hover:bg-muted disabled:opacity-50"
+                  disabled={currentVersion === 1}
+                  onClick={() => {
+                    if (onVersionChange && currentVersion) {
+                      onVersionChange(currentVersion - 2);
+                    }
+                  }}
+                  title="Previous version"
+                  type="button"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="min-w-[2rem] text-center text-xs text-muted-foreground">
+                  {currentVersion} / {totalVersions}
+                </span>
+                <button
+                  className="rounded-md p-1 hover:bg-muted disabled:opacity-50"
+                  disabled={currentVersion === totalVersions}
+                  onClick={() => {
+                    if (onVersionChange && currentVersion) {
+                      onVersionChange(currentVersion);
+                    }
+                  }}
+                  title="Next version"
+                  type="button"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+
+          {!isReadonly && message.role === "user" && (
             <MessageActions
               chatId={chatId}
               isLoading={isLoading}
@@ -404,28 +511,61 @@ const PurePreviewMessage = ({
 
 export const PreviewMessage = PurePreviewMessage;
 
-export const ThinkingMessage = () => {
+export const ThinkingMessage = ({
+  phase = "submitted",
+}: {
+  phase?: "submitted" | "streaming";
+}) => {
+  const isStreamingPhase = phase === "streaming";
+
   return (
     <div
-      className="group/message fade-in w-full animate-in duration-300"
+      className="group/message fade-in w-full animate-in duration-200"
+      data-phase={phase}
       data-role="assistant"
       data-testid="message-assistant-loading"
     >
-      <div className="flex items-start justify-start gap-3">
+      <div className="flex w-full items-start gap-2 md:gap-3">
         <div className="-mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-background ring-1 ring-border">
           <div className="animate-pulse">
             <SparklesIcon size={14} />
           </div>
         </div>
 
-        <div className="flex w-full flex-col gap-2 md:gap-4">
-          <div className="flex items-center gap-1 p-0 text-muted-foreground text-sm">
-            <span className="animate-pulse">Thinking</span>
-            <span className="inline-flex">
-              <span className="animate-bounce [animation-delay:0ms]">.</span>
-              <span className="animate-bounce [animation-delay:150ms]">.</span>
-              <span className="animate-bounce [animation-delay:300ms]">.</span>
-            </span>
+        <div className="relative flex w-full flex-col p-4">
+          <div
+            className={cn(
+              "not-prose relative h-10 w-full overflow-hidden rounded-lg border text-sm transition-colors duration-200",
+              isStreamingPhase
+                ? "border-border/50 bg-[#121212]"
+                : "border-border/40 bg-[#121212]/85"
+            )}
+          >
+            <div
+              className={cn(
+                "absolute inset-0 flex items-center px-3 transition-opacity duration-200",
+                isStreamingPhase ? "opacity-0" : "opacity-100"
+              )}
+            >
+              <ThinkingIndicator
+                className="text-zinc-300"
+                dotClassName="bg-zinc-300"
+              />
+            </div>
+
+            <div
+              className={cn(
+                "absolute inset-0 flex items-center gap-2 px-3 transition-opacity duration-200",
+                isStreamingPhase ? "opacity-100" : "opacity-0"
+              )}
+            >
+              <RegenerateSparkIcon className="size-4 animate-spin text-blue-400" />
+              <span className="font-medium text-foreground/90">Thinking</span>
+              <ThinkingIndicator
+                className="text-sky-400"
+                dotClassName="bg-sky-400"
+              />
+            </div>
           </div>
         </div>
       </div>

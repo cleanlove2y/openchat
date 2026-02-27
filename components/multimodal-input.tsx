@@ -35,6 +35,7 @@ import {
 import {
   chatModels,
   DEFAULT_CHAT_MODEL,
+  isReasoningModelId,
   modelsByProvider,
 } from "@/lib/ai/models";
 import { useAppTranslation } from "@/lib/i18n/hooks";
@@ -539,8 +540,7 @@ function PureAttachmentsButton({
   status: UseChatHelpers<ChatMessage>["status"];
   selectedModelId: string;
 }) {
-  const isReasoningModel =
-    selectedModelId.includes("reasoning") || selectedModelId.includes("think");
+  const isReasoningModel = isReasoningModelId(selectedModelId);
 
   return (
     <Button
@@ -582,6 +582,7 @@ function PureModelSelectorCompact({
     openai: "OpenAI",
     google: "Google",
     xai: "xAI",
+    deepseek: "DeepSeek",
     reasoning: "Reasoning",
   };
 

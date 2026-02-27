@@ -8,6 +8,42 @@ export type ChatModel = {
   description: string;
 };
 
+const REASONING_MODEL_PREFIXES = ["deepseek/deepseek-r1"] as const;
+const REASONING_TAG_BY_PREFIX = [
+  {
+    prefix: "deepseek/deepseek-r1",
+    tagName: "think",
+  },
+] as const;
+
+export function isReasoningModelId(modelId: string): boolean {
+  const normalizedModelId = modelId.toLowerCase();
+
+  if (
+    REASONING_MODEL_PREFIXES.some((prefix) =>
+      normalizedModelId.startsWith(prefix)
+    )
+  ) {
+    return true;
+  }
+
+  return (
+    normalizedModelId.includes("reasoning") ||
+    normalizedModelId.includes("thinking") ||
+    normalizedModelId.includes("reasoner")
+  );
+}
+
+export function getReasoningTagName(modelId: string): string {
+  const normalizedModelId = modelId.toLowerCase();
+
+  return (
+    REASONING_TAG_BY_PREFIX.find((entry) =>
+      normalizedModelId.startsWith(entry.prefix)
+    )?.tagName ?? "thinking"
+  );
+}
+
 export const chatModels: ChatModel[] = [
   // Anthropic
   {
@@ -60,6 +96,13 @@ export const chatModels: ChatModel[] = [
     name: "Grok 4.1 Fast",
     provider: "xai",
     description: "Fast with 30K context",
+  },
+  // DeepSeek
+  {
+    id: "deepseek/deepseek-r1",
+    name: "DeepSeek R1",
+    provider: "deepseek",
+    description: "DeepSeek reasoning model",
   },
   // Reasoning models (extended thinking)
   {

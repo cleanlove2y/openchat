@@ -5,6 +5,7 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { isTestEnvironment } from "../constants";
+import { getReasoningTagName, isReasoningModelId } from "./models";
 
 const THINKING_SUFFIX_REGEX = /-thinking$/;
 
@@ -32,15 +33,15 @@ export function getLanguageModel(modelId: string) {
     return myProvider.languageModel(modelId);
   }
 
-  const isReasoningModel =
-    modelId.includes("reasoning") || modelId.endsWith("-thinking");
+  const isReasoningModel = isReasoningModelId(modelId);
 
   if (isReasoningModel) {
     const gatewayModelId = modelId.replace(THINKING_SUFFIX_REGEX, "");
+    const reasoningTagName = getReasoningTagName(modelId);
 
     return wrapLanguageModel({
       model: gateway.languageModel(gatewayModelId),
-      middleware: extractReasoningMiddleware({ tagName: "thinking" }),
+      middleware: extractReasoningMiddleware({ tagName: reasoningTagName }),
     });
   }
 

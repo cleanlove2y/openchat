@@ -1,7 +1,8 @@
 "use client";
 
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, SparklesIcon } from "lucide-react";
+import { RegenerateSparkIcon } from "../icons";
 import type { ComponentProps } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import {
@@ -9,6 +10,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { cn } from "@/lib/utils";
 import { Response } from "./response";
 
@@ -64,7 +66,6 @@ export const Reasoning = memo(
     const [hasAutoClosedRef, setHasAutoClosedRef] = useState(false);
     const [startTime, setStartTime] = useState<number | null>(null);
 
-    // Track duration when streaming starts and ends
     useEffect(() => {
       if (isStreaming) {
         if (startTime === null) {
@@ -76,10 +77,8 @@ export const Reasoning = memo(
       }
     }, [isStreaming, startTime, setDuration]);
 
-    // Auto-open when streaming starts, auto-close when streaming ends (once only)
     useEffect(() => {
       if (defaultOpen && !isStreaming && isOpen && !hasAutoClosedRef) {
-        // Add a small delay before closing to allow user to see the content
         const timer = setTimeout(() => {
           setIsOpen(false);
           setHasAutoClosedRef(true);
@@ -98,11 +97,34 @@ export const Reasoning = memo(
         value={{ isStreaming, isOpen, setIsOpen, duration }}
       >
         <Collapsible
-          className={cn("not-prose", className)}
+          className={cn(
+            "not-prose flex w-full flex-col overflow-hidden rounded-lg border border-border/50 bg-[#121212] text-sm transition-all",
+            className
+          )}
           onOpenChange={handleOpenChange}
           open={isOpen}
           {...props}
         >
+          <CollapsibleTrigger asChild>
+            <div className="flex cursor-pointer items-center gap-2 px-3 py-2.5 transition-colors hover:bg-muted/10">
+              {isStreaming ? (
+                <RegenerateSparkIcon className="size-4 animate-spin text-blue-400" />
+              ) : (
+                <SparklesIcon className="size-4 text-blue-400" />
+              )}
+              {isStreaming ? (
+                <>
+                  <span className="font-medium text-foreground/90">Thinking</span>
+                  <ThinkingIndicator
+                    className="text-blue-400"
+                    dotClassName="bg-blue-400"
+                  />
+                </>
+              ) : (
+                <span className="font-medium text-foreground/90">Thoughts</span>
+              )}
+            </div>
+          </CollapsibleTrigger>
           {children}
         </Collapsible>
       </ReasoningContext.Provider>
@@ -114,27 +136,28 @@ export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger>;
 
 export const ReasoningTrigger = memo(
   ({ className, children, ...props }: ReasoningTriggerProps) => {
-    const { isStreaming, isOpen, duration } = useReasoning();
+    const { isOpen } = useReasoning();
 
     return (
       <CollapsibleTrigger
         className={cn(
-          "flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+          "flex w-full items-center justify-between border-t border-border/40 px-3 py-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted/10 hover:text-foreground",
           className
         )}
         {...props}
       >
         {children ?? (
           <>
-            <BrainIcon className="size-3" />
-            {isStreaming || duration === 0 ? (
-              <span>Thinking</span>
-            ) : (
-              <span>{duration}s</span>
-            )}
+            <div className="flex items-center gap-2">
+              {isOpen ? (
+                <span>Collapse to hide model thoughts</span>
+              ) : (
+                <span>Expand to view model thoughts</span>
+              )}
+            </div>
             <ChevronDownIcon
               className={cn(
-                "size-2.5 transition-transform",
+                "size-4 transition-transform duration-200",
                 isOpen ? "rotate-180" : "rotate-0"
               )}
             />
@@ -155,14 +178,14 @@ export const ReasoningContent = memo(
   ({ className, children, ...props }: ReasoningContentProps) => (
     <CollapsibleContent
       className={cn(
-        "mt-1.5 text-[11px] text-muted-foreground leading-relaxed",
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 outline-hidden data-[state=closed]:animate-out data-[state=open]:animate-in",
+        "text-[13px] text-muted-foreground leading-relaxed",
+        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 data-[state=closed]:animate-out data-[state=open]:animate-in",
         className
       )}
       {...props}
     >
-      <div className="max-h-48 overflow-y-auto rounded-md border border-border/50 bg-muted/30 p-2.5">
-        <Response className="grid gap-1 text-[11px] **:text-[11px] [&_li]:my-0 [&_ol]:my-1 [&_p]:my-0 [&_ul]:my-1">
+      <div className="px-3 pb-3">
+        <Response className="grid w-full gap-4 text-[13px] **:text-[13px] [&_li]:my-1 [&_ol]:my-1 [&_p]:my-1 [&_ul]:my-1">
           {children}
         </Response>
       </div>
