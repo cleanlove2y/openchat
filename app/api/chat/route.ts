@@ -1,3 +1,4 @@
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { geolocation } from "@vercel/functions";
 import {
   convertToModelMessages,
@@ -43,8 +44,10 @@ import {
   getMessageById,
   getMessageCountByUserId,
   getMessagesByChatId,
+  getUserLlmConnectionById,
   saveChat,
   saveMessages,
+  touchUserLlmConnectionLastUsed,
   updateChatTitleById,
   updateMessage,
 } from "@/lib/db/queries";
@@ -53,7 +56,12 @@ import { OpenChatError } from "@/lib/errors";
 import { getAppLogger } from "@/lib/logging";
 import type { UserType } from "@/lib/server/auth/core";
 import { generateTitleFromUserMessage } from "@/lib/server/chat/actions";
+import {
+  getConnectionApiKey,
+  parseConnectionTemperature,
+} from "@/lib/server/user-llm";
 import type { ChatMessage } from "@/lib/types";
+import { decodeUserConnectionModelId } from "@/lib/user-llm";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
 
@@ -73,6 +81,8 @@ function getStreamContext() {
 }
 
 export { getStreamContext };
+
+const MODEL_EXCLUDED_UI_PART_TYPES = new Set(["data-chat-title", "step-start"]);
 
 function sanitizeUserSkillDirectivesForModel(
   messages: ChatMessage[]
@@ -115,6 +125,44 @@ function sanitizeUserSkillDirectivesForModel(
   });
 
   return changedAny ? nextMessages : messages;
+}
+
+function stripUiOnlyPartsForModel(messages: ChatMessage[]): ChatMessage[] {
+  let changedAny = false;
+
+  const nextMessages = messages.map((message) => {
+    const nextParts = message.parts.filter((part) => {
+      const partType = (part as { type?: unknown }).type;
+      return (
+        typeof partType !== "string" ||
+        !MODEL_EXCLUDED_UI_PART_TYPES.has(partType)
+      );
+    });
+
+    if (nextParts.length === message.parts.length) {
+      return message;
+    }
+
+    changedAny = true;
+    return {
+      ...message,
+      parts: nextParts,
+    };
+  });
+
+  return changedAny ? nextMessages : messages;
+}
+
+function removeEmptyModelMessages(
+  messages: Awaited<ReturnType<typeof convertToModelMessages>>
+) {
+  return messages.filter((message) => {
+    const content = (message as { content?: unknown }).content;
+
+    // Tool approval continuations can include UI-only assistant parts
+    // (for example, chat title metadata) that convert into empty model messages.
+    return !Array.isArray(content) || content.length > 0;
+  });
 }
 
 function buildExplicitSkillsSystemPrompt(
@@ -232,7 +280,9 @@ const postHandler = async ({
     uiMessages = trimMessagesForRegenerate({ messages: uiMessages, messageId });
   }
 
-  const modelUiMessages = sanitizeUserSkillDirectivesForModel(uiMessages);
+  const modelUiMessages = stripUiOnlyPartsForModel(
+    sanitizeUserSkillDirectivesForModel(uiMessages)
+  );
   const requestedSkillNames = collectSkillDirectiveNamesFromRequestBody({
     message,
     messages,
@@ -246,6 +296,33 @@ const postHandler = async ({
     city,
     country,
   };
+
+  const selectedUserConnectionModel =
+    decodeUserConnectionModelId(selectedChatModel);
+  const selectedUserConnection = selectedUserConnectionModel
+    ? await getUserLlmConnectionById({
+        id: selectedUserConnectionModel.connectionId,
+        userId: session.user.id,
+      })
+    : null;
+
+  if (selectedUserConnectionModel && !selectedUserConnection) {
+    return new OpenChatError(
+      "bad_request:api",
+      "Selected custom model connection was not found"
+    ).toResponse();
+  }
+
+  if (selectedUserConnection && !selectedUserConnection.enabled) {
+    return new OpenChatError(
+      "bad_request:api",
+      "Selected custom model connection is disabled"
+    ).toResponse();
+  }
+
+  const selectedUserConnectionApiKey = selectedUserConnection
+    ? getConnectionApiKey(selectedUserConnection)
+    : undefined;
 
   if (message?.role === "user") {
     const messageAlreadyExists = messagesFromDb.some(
@@ -273,9 +350,27 @@ const postHandler = async ({
     }
   }
 
-  const isReasoningModel = isReasoningModelId(selectedChatModel);
+  const isUserConnectionModel = Boolean(
+    selectedUserConnection && selectedUserConnectionModel
+  );
+  const isReasoningModel = isUserConnectionModel
+    ? false
+    : isReasoningModelId(selectedChatModel);
+  const activeLanguageModel =
+    selectedUserConnection && selectedUserConnectionModel
+      ? createOpenAICompatible({
+          name: selectedUserConnection.provider,
+          baseURL: selectedUserConnection.baseUrl,
+          apiKey: selectedUserConnectionApiKey,
+        }).chatModel(selectedUserConnectionModel.modelId)
+      : getLanguageModel(selectedChatModel);
+  const requestTemperature = selectedUserConnection
+    ? parseConnectionTemperature(selectedUserConnection.defaultTemperature)
+    : undefined;
 
-  const modelMessages = await convertToModelMessages(modelUiMessages);
+  const modelMessages = removeEmptyModelMessages(
+    await convertToModelMessages(modelUiMessages)
+  );
   const skillsConfig = getSkillsConfig();
   const skillsSnapshot = await getSkillsSnapshot(skillsConfig).catch(
     (error) => {
@@ -433,9 +528,10 @@ const postHandler = async ({
     originalMessages: isMessagesFlow ? uiMessages : undefined,
     execute: async ({ writer: dataStream }) => {
       const result = streamText({
-        model: getLanguageModel(selectedChatModel),
+        model: activeLanguageModel,
         system: effectiveSystemPrompt,
         messages: modelMessages,
+        temperature: requestTemperature,
         stopWhen: stepCountIs(5),
         experimental_activeTools: activeTools,
         providerOptions: isReasoningModel
@@ -513,6 +609,13 @@ const postHandler = async ({
             attachments: [],
             chatId: id,
           })),
+        });
+      }
+
+      if (selectedUserConnection) {
+        await touchUserLlmConnectionLastUsed({
+          id: selectedUserConnection.id,
+          userId: session.user.id,
         });
       }
     },
@@ -598,7 +701,8 @@ const mapChatPostError = (error: unknown, request: Request) => {
     appLogger.error(
       {
         event: "api.chat.unhandled_error",
-        error,
+        err: error,
+        errorMessage: error.message,
         vercelId,
       },
       "Unhandled error in chat API"

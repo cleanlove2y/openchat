@@ -44,7 +44,7 @@ export function getSkillsSnapshot(
     state.snapshot &&
     state.expiresAt > now
   ) {
-    return state.snapshot;
+    return Promise.resolve(state.snapshot);
   }
 
   if (state && state.fingerprint === fingerprint && state.inFlight) {

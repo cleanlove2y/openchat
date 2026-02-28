@@ -32,18 +32,23 @@ export const ModelSelectorTrigger = (props: ModelSelectorTriggerProps) => (
 );
 
 export type ModelSelectorContentProps = ComponentProps<typeof DialogContent> & {
+  disableAutomaticFiltering?: boolean;
   title?: ReactNode;
 };
 
 export const ModelSelectorContent = ({
   className,
   children,
+  disableAutomaticFiltering = true,
   title = "Model Selector",
   ...props
 }: ModelSelectorContentProps) => (
   <DialogContent className={cn("p-0", className)} {...props}>
     <DialogTitle className="sr-only">{title}</DialogTitle>
-    <Command className="**:data-[slot=command-input-wrapper]:h-auto">
+    <Command
+      className="**:data-[slot=command-input-wrapper]:h-auto"
+      shouldFilter={!disableAutomaticFiltering}
+    >
       {children}
     </Command>
   </DialogContent>

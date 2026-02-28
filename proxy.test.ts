@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { proxy } from "./proxy";
 
 test("redirects non-localized page requests to locale-prefixed path", async () => {
@@ -10,7 +10,7 @@ test("redirects non-localized page requests to locale-prefixed path", async () =
     },
   });
 
-  const response = await proxy(request);
+  const response = (await proxy(request)) as NextResponse;
 
   assert.equal(response.status, 307);
   assert.equal(
@@ -28,7 +28,7 @@ test("prefers locale cookie over accept-language when redirecting page requests"
     },
   });
 
-  const response = await proxy(request);
+  const response = (await proxy(request)) as NextResponse;
 
   assert.equal(response.status, 307);
   assert.equal(response.headers.get("location"), "http://localhost/zh/login");

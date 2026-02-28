@@ -3,24 +3,33 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import { CheckIcon, WrenchIcon, XIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  WrenchIcon,
+  XIcon,
+} from "lucide-react";
 import { usePathname } from "next/navigation";
 import {
   type ChangeEvent,
   type Dispatch,
+  type KeyboardEvent,
   memo,
+  type ReactNode,
   type SetStateAction,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { toast } from "sonner";
+import useSWR from "swr";
 import { useLocalStorage, useWindowSize } from "usehooks-ts";
 import {
   ModelSelector,
   ModelSelectorContent,
-  ModelSelectorGroup,
   ModelSelectorInput,
   ModelSelectorItem,
   ModelSelectorList,
@@ -28,6 +37,7 @@ import {
   ModelSelectorName,
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import {
   type SlashCommandItem,
   useSlashCommand,
@@ -36,12 +46,17 @@ import {
   chatModels,
   DEFAULT_CHAT_MODEL,
   isReasoningModelId,
-  modelsByProvider,
 } from "@/lib/ai/models";
 import { useAppTranslation } from "@/lib/i18n/hooks";
 import { localizePathFromPathname } from "@/lib/i18n/navigation";
 import type { Attachment, ChatMessage } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import {
+  decodeUserConnectionModelId,
+  getModelLogoProvider,
+  getProviderDisplayName,
+  type UserFacingChatModel,
+} from "@/lib/user-llm";
+import { cn, fetcher } from "@/lib/utils";
 import {
   PromptInput,
   PromptInputSubmit,
@@ -61,6 +76,76 @@ function setCookie(name: string, value: string) {
   // eslint-disable-next-line unicorn/no-document-cookie
   // biome-ignore lint/suspicious/noDocumentCookie: needed for client-side cookie setting
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}`;
+}
+
+function highlightMatch(text: string, query: string): ReactNode {
+  if (!query) {
+    return text;
+  }
+
+  const normalizedText = text.toLowerCase();
+  const normalizedQuery = query.toLowerCase();
+
+  if (!normalizedText.includes(normalizedQuery)) {
+    return text;
+  }
+
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const matchIndex = normalizedText.indexOf(normalizedQuery, cursor);
+
+    if (matchIndex === -1) {
+      parts.push(text.slice(cursor));
+      break;
+    }
+
+    if (matchIndex > cursor) {
+      parts.push(text.slice(cursor, matchIndex));
+    }
+
+    const matchedText = text.slice(matchIndex, matchIndex + query.length);
+
+    parts.push(
+      <span
+        className="rounded-sm bg-primary/15 px-0.5 font-semibold text-foreground"
+        key={`${matchIndex}-${matchedText}`}
+      >
+        {matchedText}
+      </span>
+    );
+
+    cursor = matchIndex + query.length;
+  }
+
+  return parts;
+}
+
+function createPendingModelEntry(selectedModelId: string): UserFacingChatModel {
+  const decodedUserModel = decodeUserConnectionModelId(selectedModelId);
+
+  if (decodedUserModel) {
+    return {
+      id: selectedModelId,
+      realId: decodedUserModel.modelId,
+      connectionId: decodedUserModel.connectionId,
+      name: decodedUserModel.modelId,
+      provider: "custom",
+      description: "Loading model metadata...",
+      source: "user",
+    };
+  }
+
+  const [provider = "openai", ...modelSegments] = selectedModelId.split("/");
+
+  return {
+    id: selectedModelId,
+    name: modelSegments.join("/") || selectedModelId,
+    provider,
+    description: "Loading model metadata...",
+    source: "system",
+  };
 }
 
 function PureMultimodalInput({
@@ -569,22 +654,294 @@ function PureModelSelectorCompact({
 }) {
   const { t } = useAppTranslation("chat");
   const [open, setOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const [expandedSourceGroups, setExpandedSourceGroups] = useState<
+    Record<"user" | "system", boolean>
+  >({
+    user: false,
+    system: true,
+  });
+  const [expandedProviderGroups, setExpandedProviderGroups] = useState<
+    Record<string, boolean>
+  >({});
+  const hasInitializedSelectorState = useRef(false);
+  const wasSearchActive = useRef(false);
+  const fallbackModels = chatModels.map((model) => ({
+    ...model,
+    source: "system" as const,
+  }));
+  const { data } = useSWR<{ object: "list"; data: UserFacingChatModel[] }>(
+    "/api/models",
+    fetcher
+  );
 
+  const authoritativeModels = data?.data;
+  const displayModels = useMemo(() => {
+    const baseModels = authoritativeModels ?? fallbackModels;
+    const hasSelectedModel = baseModels.some(
+      (model) => model.id === selectedModelId
+    );
+
+    if (hasSelectedModel) {
+      return baseModels;
+    }
+
+    return [createPendingModelEntry(selectedModelId), ...baseModels];
+  }, [authoritativeModels, fallbackModels, selectedModelId]);
   const selectedModel =
-    chatModels.find((m) => m.id === selectedModelId) ??
-    chatModels.find((m) => m.id === DEFAULT_CHAT_MODEL) ??
-    chatModels[0];
-  const [provider] = selectedModel.id.split("/");
+    displayModels.find((model) => model.id === selectedModelId) ??
+    displayModels.find((model) => model.id === DEFAULT_CHAT_MODEL) ??
+    displayModels[0] ??
+    fallbackModels[0];
+  const provider = getModelLogoProvider(selectedModel?.provider ?? "openai");
+  const normalizedSearch = searchValue.trim().toLowerCase();
+  const filteredModels = useMemo(() => {
+    if (!normalizedSearch) {
+      return displayModels;
+    }
 
-  // Provider display names
-  const providerNames: Record<string, string> = {
-    anthropic: "Anthropic",
-    openai: "OpenAI",
-    google: "Google",
-    xai: "xAI",
-    deepseek: "DeepSeek",
-    reasoning: "Reasoning",
-  };
+    return displayModels.filter((model) => {
+      const searchableText = [
+        model.name,
+        model.provider,
+        model.description,
+        model.source,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [displayModels, normalizedSearch]);
+  const selectedProviderGroupKey = selectedModel
+    ? `${selectedModel.source}:${selectedModel.provider}`
+    : null;
+  const selectedSourceKey = selectedModel?.source ?? null;
+  const sourceEntries = useMemo(() => {
+    const sourceOrder = ["user", "system"] as const;
+    const sourceLabels: Record<(typeof sourceOrder)[number], string> = {
+      user: t("model.group.user"),
+      system: t("model.group.system"),
+    };
+    const groupedSources = filteredModels.reduce(
+      (sources, model) => {
+        const sourceKey = model.source;
+        const providerGroupKey = `${model.source}:${model.provider}`;
+
+        if (!sources[sourceKey]) {
+          sources[sourceKey] = {
+            label: sourceLabels[sourceKey],
+            providers: {},
+          };
+        }
+
+        if (!sources[sourceKey].providers[providerGroupKey]) {
+          sources[sourceKey].providers[providerGroupKey] = [];
+        }
+
+        sources[sourceKey].providers[providerGroupKey].push(model);
+        return sources;
+      },
+      {} as Record<
+        "user" | "system",
+        {
+          label: string;
+          providers: Record<string, UserFacingChatModel[]>;
+        }
+      >
+    );
+
+    return sourceOrder
+      .filter((sourceKey) => {
+        const sourceGroup = groupedSources[sourceKey];
+        return sourceGroup && Object.keys(sourceGroup.providers).length > 0;
+      })
+      .sort((leftKey, rightKey) => {
+        if (leftKey === selectedSourceKey) {
+          return -1;
+        }
+
+        if (rightKey === selectedSourceKey) {
+          return 1;
+        }
+
+        return sourceOrder.indexOf(leftKey) - sourceOrder.indexOf(rightKey);
+      })
+      .map((sourceKey) => {
+        const sourceGroup = groupedSources[sourceKey];
+        const providerEntries = Object.entries(sourceGroup.providers)
+          .sort(([leftKey], [rightKey]) => {
+            if (leftKey === selectedProviderGroupKey) {
+              return -1;
+            }
+
+            if (rightKey === selectedProviderGroupKey) {
+              return 1;
+            }
+
+            return leftKey.localeCompare(rightKey);
+          })
+          .map(([providerGroupKey, models]) => ({
+            key: providerGroupKey,
+            label: getProviderDisplayName(models[0]?.provider ?? "openai"),
+            models,
+          }));
+
+        return {
+          key: sourceKey,
+          label: sourceGroup.label,
+          providerEntries,
+        };
+      });
+  }, [filteredModels, selectedProviderGroupKey, selectedSourceKey, t]);
+
+  useEffect(() => {
+    if (!authoritativeModels) {
+      return;
+    }
+
+    const hasSelectedModel = authoritativeModels.some(
+      (model) => model.id === selectedModelId
+    );
+
+    if (hasSelectedModel) {
+      return;
+    }
+
+    const decodedSelectedModel = decodeUserConnectionModelId(selectedModelId);
+    const fallbackModelId =
+      (decodedSelectedModel
+        ? authoritativeModels.find(
+            (model) =>
+              model.source === "user" &&
+              model.connectionId === decodedSelectedModel.connectionId
+          )?.id
+        : undefined) ??
+      authoritativeModels.find((model) => model.id === DEFAULT_CHAT_MODEL)
+        ?.id ??
+      authoritativeModels.find((model) => model.source === "system")?.id ??
+      authoritativeModels[0]?.id;
+
+    if (!fallbackModelId || fallbackModelId === selectedModelId) {
+      return;
+    }
+
+    onModelChange?.(fallbackModelId);
+    setCookie("chat-model", fallbackModelId);
+  }, [authoritativeModels, onModelChange, selectedModelId]);
+
+  useEffect(() => {
+    if (!open) {
+      hasInitializedSelectorState.current = false;
+      wasSearchActive.current = false;
+      return;
+    }
+
+    if (hasInitializedSelectorState.current) {
+      return;
+    }
+
+    hasInitializedSelectorState.current = true;
+
+    setSearchValue("");
+    setExpandedSourceGroups({
+      user: selectedSourceKey === "user",
+      system: selectedSourceKey !== "user",
+    });
+
+    const nextProviderState: Record<string, boolean> = {};
+
+    for (const sourceEntry of sourceEntries) {
+      for (const providerEntry of sourceEntry.providerEntries) {
+        nextProviderState[providerEntry.key] =
+          providerEntry.key === selectedProviderGroupKey;
+      }
+    }
+
+    setExpandedProviderGroups(nextProviderState);
+  }, [open, selectedProviderGroupKey, selectedSourceKey, sourceEntries]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const isSearchActive = normalizedSearch.length > 0;
+
+    if (isSearchActive && !wasSearchActive.current) {
+      setExpandedSourceGroups((currentState) => ({
+        ...currentState,
+        ...Object.fromEntries(
+          sourceEntries.map((sourceEntry) => [sourceEntry.key, true])
+        ),
+      }));
+
+      setExpandedProviderGroups((currentState) => {
+        const nextState = { ...currentState };
+
+        for (const sourceEntry of sourceEntries) {
+          for (const providerEntry of sourceEntry.providerEntries) {
+            nextState[providerEntry.key] = true;
+          }
+        }
+
+        return nextState;
+      });
+    }
+
+    if (!isSearchActive && wasSearchActive.current) {
+      setExpandedSourceGroups({
+        user: selectedSourceKey === "user",
+        system: selectedSourceKey !== "user",
+      });
+
+      const nextProviderState: Record<string, boolean> = {};
+
+      for (const sourceEntry of sourceEntries) {
+        for (const providerEntry of sourceEntry.providerEntries) {
+          nextProviderState[providerEntry.key] =
+            providerEntry.key === selectedProviderGroupKey;
+        }
+      }
+
+      setExpandedProviderGroups(nextProviderState);
+    }
+
+    wasSearchActive.current = isSearchActive;
+  }, [
+    normalizedSearch,
+    open,
+    selectedProviderGroupKey,
+    selectedSourceKey,
+    sourceEntries,
+  ]);
+
+  const toggleSourceGroup = useCallback((sourceKey: "user" | "system") => {
+    setExpandedSourceGroups((currentState) => ({
+      ...currentState,
+      [sourceKey]: !currentState[sourceKey],
+    }));
+  }, []);
+
+  const toggleProviderGroup = useCallback((groupKey: string) => {
+    setExpandedProviderGroups((currentState) => ({
+      ...currentState,
+      [groupKey]: !currentState[groupKey],
+    }));
+  }, []);
+
+  const handleGroupHeaderKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, callback: () => void) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+
+      event.preventDefault();
+      callback();
+    },
+    []
+  );
 
   return (
     <ModelSelector onOpenChange={setOpen} open={open}>
@@ -594,37 +951,130 @@ function PureModelSelectorCompact({
           <ModelSelectorName>{selectedModel.name}</ModelSelectorName>
         </Button>
       </ModelSelectorTrigger>
-      <ModelSelectorContent>
-        <ModelSelectorInput placeholder={t("model.searchPlaceholder")} />
+      <ModelSelectorContent disableAutomaticFiltering={true}>
+        <ModelSelectorInput
+          onValueChange={setSearchValue}
+          placeholder={t("model.searchPlaceholder")}
+          value={searchValue}
+        />
         <ModelSelectorList>
-          {Object.entries(modelsByProvider).map(
-            ([providerKey, providerModels]) => (
-              <ModelSelectorGroup
-                heading={providerNames[providerKey] ?? providerKey}
-                key={providerKey}
-              >
-                {providerModels.map((model) => {
-                  const logoProvider = model.id.split("/")[0];
-                  return (
-                    <ModelSelectorItem
-                      key={model.id}
-                      onSelect={() => {
-                        onModelChange?.(model.id);
-                        setCookie("chat-model", model.id);
-                        setOpen(false);
-                      }}
-                      value={model.id}
-                    >
-                      <ModelSelectorLogo provider={logoProvider} />
-                      <ModelSelectorName>{model.name}</ModelSelectorName>
-                      {model.id === selectedModel.id && (
-                        <CheckIcon className="ml-auto size-4" />
+          {sourceEntries.length === 0 ? (
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+              {t("model.empty")}
+            </div>
+          ) : (
+            sourceEntries.map((sourceEntry) => {
+              const isSourceExpanded = expandedSourceGroups[sourceEntry.key];
+
+              return (
+                <Collapsible key={sourceEntry.key} open={isSourceExpanded}>
+                  <button
+                    className="flex w-full cursor-pointer items-center gap-2 border-b border-border/70 bg-muted/30 px-3 py-3 text-sm font-semibold text-foreground transition-colors duration-200 hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                    onClick={() => toggleSourceGroup(sourceEntry.key)}
+                    onKeyDown={(event) =>
+                      handleGroupHeaderKeyDown(event, () =>
+                        toggleSourceGroup(sourceEntry.key)
+                      )
+                    }
+                    type="button"
+                  >
+                    {isSourceExpanded ? (
+                      <ChevronDownIcon className="size-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRightIcon className="size-4 text-muted-foreground" />
+                    )}
+                    <span>
+                      {highlightMatch(sourceEntry.label, normalizedSearch)}
+                    </span>
+                    <span className="ml-auto rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                      {sourceEntry.providerEntries.reduce(
+                        (count, providerEntry) =>
+                          count + providerEntry.models.length,
+                        0
                       )}
-                    </ModelSelectorItem>
-                  );
-                })}
-              </ModelSelectorGroup>
-            )
+                    </span>
+                  </button>
+                  <CollapsibleContent>
+                    <div className="space-y-1 bg-background/70 px-2 py-2">
+                      {sourceEntry.providerEntries.map((providerEntry) => {
+                        const isProviderExpanded =
+                          expandedProviderGroups[providerEntry.key] ?? false;
+
+                        return (
+                          <Collapsible
+                            key={providerEntry.key}
+                            open={isProviderExpanded}
+                          >
+                            <button
+                              className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent border-l-border/80 bg-transparent px-3 py-2 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:border-border/70 hover:bg-muted/20 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                              onClick={() =>
+                                toggleProviderGroup(providerEntry.key)
+                              }
+                              onKeyDown={(event) =>
+                                handleGroupHeaderKeyDown(event, () =>
+                                  toggleProviderGroup(providerEntry.key)
+                                )
+                              }
+                              type="button"
+                            >
+                              {isProviderExpanded ? (
+                                <ChevronDownIcon className="size-4" />
+                              ) : (
+                                <ChevronRightIcon className="size-4" />
+                              )}
+                              <span className="truncate">
+                                {highlightMatch(
+                                  providerEntry.label,
+                                  normalizedSearch
+                                )}
+                              </span>
+                              <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground/90">
+                                {providerEntry.models.length}
+                              </span>
+                            </button>
+                            <CollapsibleContent>
+                              <div className="ml-4 space-y-1 border-l border-border/60 px-2 pb-1">
+                                {providerEntry.models.map((model) => {
+                                  const logoProvider = getModelLogoProvider(
+                                    model.provider
+                                  );
+
+                                  return (
+                                    <ModelSelectorItem
+                                      className="rounded-lg px-3"
+                                      key={model.id}
+                                      onSelect={() => {
+                                        onModelChange?.(model.id);
+                                        setCookie("chat-model", model.id);
+                                        setOpen(false);
+                                      }}
+                                      value={`${model.name} ${model.provider} ${model.source}`}
+                                    >
+                                      <ModelSelectorLogo
+                                        provider={logoProvider}
+                                      />
+                                      <ModelSelectorName>
+                                        {highlightMatch(
+                                          model.name,
+                                          normalizedSearch
+                                        )}
+                                      </ModelSelectorName>
+                                      {model.id === selectedModel?.id && (
+                                        <CheckIcon className="ml-auto size-4" />
+                                      )}
+                                    </ModelSelectorItem>
+                                  );
+                                })}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        );
+                      })}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            })
           )}
         </ModelSelectorList>
       </ModelSelectorContent>

@@ -1,4 +1,4 @@
-import type { InferSelectModel } from "drizzle-orm";
+import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
@@ -29,6 +29,12 @@ export const chat = pgTable("Chat", {
   visibility: varchar("visibility", { enum: ["public", "private"] })
     .notNull()
     .default("private"),
+  connectionId: uuid("connectionId"),
+  modelId: varchar("modelId"),
+  activeResumeId: uuid("activeResumeId"),
+  awaitingResumeSelection: boolean("awaitingResumeSelection")
+    .notNull()
+    .default(false),
 });
 
 export type Chat = InferSelectModel<typeof chat>;
@@ -168,3 +174,38 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+export const userLlmConnection = pgTable("UserLlmConnections", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  userId: uuid("userId")
+    .notNull()
+    .references(() => user.id),
+  name: varchar("name", { length: 100 }).notNull(),
+  provider: varchar("provider", { length: 64 }).notNull(),
+  baseUrl: text("baseUrl").notNull(),
+  apiKeyEncrypted: text("apiKeyEncrypted"),
+  defaultModel: text("defaultModel"),
+  defaultTemperature: varchar("defaultTemperature", { length: 16 }),
+  enabled: boolean("enabled").notNull().default(true),
+  isDefault: boolean("isDefault").notNull().default(false),
+  lastValidatedAt: timestamp("lastValidatedAt"),
+  lastValidationError: text("lastValidationError"),
+  lastUsedAt: timestamp("lastUsedAt"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+export type UserLlmConnection = InferSelectModel<typeof userLlmConnection>;
+export type NewUserLlmConnection = InferInsertModel<typeof userLlmConnection>;
+
+export const userLlmModelCache = pgTable("UserLlmModelCache", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  connectionId: uuid("connectionId")
+    .notNull()
+    .references(() => userLlmConnection.id, { onDelete: "cascade" }),
+  modelsJson: json("modelsJson").notNull(),
+  fetchedAt: timestamp("fetchedAt").notNull().defaultNow(),
+});
+
+export type UserLlmModelCache = InferSelectModel<typeof userLlmModelCache>;
+export type NewUserLlmModelCache = InferInsertModel<typeof userLlmModelCache>;

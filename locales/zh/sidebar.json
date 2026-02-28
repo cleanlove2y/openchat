@@ -1,5 +1,6 @@
 {
   "tooltip.deleteAllChats": "删除全部对话",
+  "tooltip.settings": "设置",
   "tooltip.newChat": "新建对话",
   "toast.deleteAllLoading": "正在删除全部对话...",
   "toast.deleteAllSuccess": "已成功删除全部对话",
@@ -33,5 +34,6 @@
   "user.toggleTheme": "切换到{{mode}}模式",
   "user.authChecking": "正在检查认证状态，请稍后再试！",
   "user.login": "登录账号",
-  "user.signOut": "退出登录"
+  "user.signOut": "退出登录",
+  "nav.settings": "设置"
 }

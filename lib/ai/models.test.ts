@@ -1,3 +1,8 @@
+import type {
+  LanguageModelV3FinishReason,
+  LanguageModelV3GenerateResult,
+  LanguageModelV3StreamPart,
+} from "@ai-sdk/provider";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { getResponseChunksByPrompt } from "@/tests/prompts/utils";
@@ -7,13 +12,22 @@ const mockUsage = {
   outputTokens: { total: 20, text: 20, reasoning: 0 },
 };
 
-export const chatModel = new MockLanguageModelV3({
-  doGenerate: async () => ({
-    finishReason: "stop",
+const mockFinishReason: LanguageModelV3FinishReason = {
+  unified: "stop",
+  raw: "stop",
+};
+
+function createGenerateResult(text: string): LanguageModelV3GenerateResult {
+  return {
+    finishReason: mockFinishReason,
     usage: mockUsage,
-    content: [{ type: "text", text: "Hello, world!" }],
+    content: [{ type: "text", text }],
     warnings: [],
-  }),
+  };
+}
+
+export const chatModel = new MockLanguageModelV3({
+  doGenerate: async () => createGenerateResult("Hello, world!"),
   doStream: async ({ prompt }) => ({
     stream: simulateReadableStream({
       chunkDelayInMs: 500,
@@ -24,12 +38,7 @@ export const chatModel = new MockLanguageModelV3({
 });
 
 export const reasoningModel = new MockLanguageModelV3({
-  doGenerate: async () => ({
-    finishReason: "stop",
-    usage: mockUsage,
-    content: [{ type: "text", text: "Hello, world!" }],
-    warnings: [],
-  }),
+  doGenerate: async () => createGenerateResult("Hello, world!"),
   doStream: async ({ prompt }) => ({
     stream: simulateReadableStream({
       chunkDelayInMs: 500,
@@ -40,12 +49,7 @@ export const reasoningModel = new MockLanguageModelV3({
 });
 
 export const titleModel = new MockLanguageModelV3({
-  doGenerate: async () => ({
-    finishReason: "stop",
-    usage: mockUsage,
-    content: [{ type: "text", text: "This is a test title" }],
-    warnings: [],
-  }),
+  doGenerate: async () => createGenerateResult("This is a test title"),
   doStream: async () => ({
     stream: simulateReadableStream({
       chunkDelayInMs: 500,
@@ -56,21 +60,16 @@ export const titleModel = new MockLanguageModelV3({
         { id: "1", type: "text-end" },
         {
           type: "finish",
-          finishReason: "stop",
+          finishReason: mockFinishReason,
           usage: mockUsage,
         },
-      ],
+      ] satisfies LanguageModelV3StreamPart[],
     }),
   }),
 });
 
 export const artifactModel = new MockLanguageModelV3({
-  doGenerate: async () => ({
-    finishReason: "stop",
-    usage: mockUsage,
-    content: [{ type: "text", text: "Hello, world!" }],
-    warnings: [],
-  }),
+  doGenerate: async () => createGenerateResult("Hello, world!"),
   doStream: async ({ prompt }) => ({
     stream: simulateReadableStream({
       chunkDelayInMs: 50,

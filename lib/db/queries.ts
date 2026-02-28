@@ -25,11 +25,17 @@ import {
   type DBMessage,
   document,
   message,
+  type NewUserLlmConnection,
+  type NewUserLlmModelCache,
   type Suggestion,
   stream,
   suggestion,
   type User,
+  type UserLlmConnection,
+  type UserLlmModelCache,
   user,
+  userLlmConnection,
+  userLlmModelCache,
   vote,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
@@ -606,6 +612,366 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     throw new OpenChatError(
       "bad_request:database",
       "Failed to get stream ids by chat id"
+    );
+  }
+}
+
+export async function getUserLlmConnections({
+  userId,
+}: {
+  userId: string;
+}): Promise<UserLlmConnection[]> {
+  try {
+    return await db
+      .select()
+      .from(userLlmConnection)
+      .where(eq(userLlmConnection.userId, userId))
+      .orderBy(desc(userLlmConnection.isDefault), asc(userLlmConnection.name));
+  } catch (_error) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to get user LLM connections"
+    );
+  }
+}
+
+export async function getUserLlmConnectionById({
+  id,
+  userId,
+}: {
+  id: string;
+  userId: string;
+}): Promise<UserLlmConnection | null> {
+  try {
+    const [connection] = await db
+      .select()
+      .from(userLlmConnection)
+      .where(
+        and(eq(userLlmConnection.id, id), eq(userLlmConnection.userId, userId))
+      )
+      .limit(1);
+
+    return connection ?? null;
+  } catch (_error) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to get user LLM connection by id"
+    );
+  }
+}
+
+export async function createUserLlmConnection({
+  userId,
+  name,
+  provider,
+  baseUrl,
+  apiKeyEncrypted,
+  defaultModel,
+  defaultTemperature,
+  enabled,
+  isDefault,
+}: {
+  userId: string;
+  name: string;
+  provider: string;
+  baseUrl: string;
+  apiKeyEncrypted: string | null;
+  defaultModel?: string | null;
+  defaultTemperature?: string | null;
+  enabled?: boolean;
+  isDefault?: boolean;
+}): Promise<UserLlmConnection> {
+  const now = new Date();
+
+  try {
+    if (isDefault) {
+      await db
+        .update(userLlmConnection)
+        .set({ isDefault: false, updatedAt: now })
+        .where(eq(userLlmConnection.userId, userId));
+    }
+
+    const [connection] = await db
+      .insert(userLlmConnection)
+      .values({
+        userId,
+        name,
+        provider,
+        baseUrl,
+        apiKeyEncrypted,
+        defaultModel: defaultModel ?? null,
+        defaultTemperature: defaultTemperature ?? null,
+        enabled: enabled ?? true,
+        isDefault: isDefault ?? false,
+        createdAt: now,
+        updatedAt: now,
+      } satisfies NewUserLlmConnection)
+      .returning();
+
+    if (!connection) {
+      throw new OpenChatError(
+        "bad_request:database",
+        "No connection returned after insert"
+      );
+    }
+
+    return connection;
+  } catch (error) {
+    if (error instanceof OpenChatError) {
+      throw error;
+    }
+
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to create user LLM connection"
+    );
+  }
+}
+
+export async function updateUserLlmConnection({
+  id,
+  userId,
+  name,
+  provider,
+  baseUrl,
+  apiKeyEncrypted,
+  defaultModel,
+  defaultTemperature,
+  enabled,
+  isDefault,
+}: {
+  id: string;
+  userId: string;
+  name?: string;
+  provider?: string;
+  baseUrl?: string;
+  apiKeyEncrypted?: string | null;
+  defaultModel?: string | null;
+  defaultTemperature?: string | null;
+  enabled?: boolean;
+  isDefault?: boolean;
+}): Promise<UserLlmConnection | null> {
+  const now = new Date();
+
+  try {
+    if (isDefault) {
+      await db
+        .update(userLlmConnection)
+        .set({ isDefault: false, updatedAt: now })
+        .where(eq(userLlmConnection.userId, userId));
+    }
+
+    const [connection] = await db
+      .update(userLlmConnection)
+      .set({
+        updatedAt: now,
+        ...(name !== undefined ? { name } : {}),
+        ...(provider !== undefined ? { provider } : {}),
+        ...(baseUrl !== undefined ? { baseUrl } : {}),
+        ...(apiKeyEncrypted !== undefined ? { apiKeyEncrypted } : {}),
+        ...(defaultModel !== undefined ? { defaultModel } : {}),
+        ...(defaultTemperature !== undefined ? { defaultTemperature } : {}),
+        ...(enabled !== undefined ? { enabled } : {}),
+        ...(isDefault !== undefined ? { isDefault } : {}),
+      } satisfies Partial<NewUserLlmConnection>)
+      .where(
+        and(eq(userLlmConnection.id, id), eq(userLlmConnection.userId, userId))
+      )
+      .returning();
+
+    return connection ?? null;
+  } catch (_error) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to update user LLM connection"
+    );
+  }
+}
+
+export async function deleteUserLlmConnection({
+  id,
+  userId,
+}: {
+  id: string;
+  userId: string;
+}): Promise<UserLlmConnection | null> {
+  try {
+    const [ownedConnection] = await db
+      .select({ id: userLlmConnection.id })
+      .from(userLlmConnection)
+      .where(
+        and(eq(userLlmConnection.id, id), eq(userLlmConnection.userId, userId))
+      )
+      .limit(1);
+
+    if (!ownedConnection) {
+      return null;
+    }
+
+    await db
+      .delete(userLlmModelCache)
+      .where(eq(userLlmModelCache.connectionId, ownedConnection.id));
+
+    const [connection] = await db
+      .delete(userLlmConnection)
+      .where(
+        and(eq(userLlmConnection.id, id), eq(userLlmConnection.userId, userId))
+      )
+      .returning();
+
+    return connection ?? null;
+  } catch (_error) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to delete user LLM connection"
+    );
+  }
+}
+
+export async function getUserLlmModelCache({
+  connectionId,
+}: {
+  connectionId: string;
+}): Promise<UserLlmModelCache | null> {
+  try {
+    const [cache] = await db
+      .select()
+      .from(userLlmModelCache)
+      .where(eq(userLlmModelCache.connectionId, connectionId))
+      .orderBy(desc(userLlmModelCache.fetchedAt))
+      .limit(1);
+
+    return cache ?? null;
+  } catch (_error) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to get user LLM model cache"
+    );
+  }
+}
+
+export async function saveUserLlmModelCache({
+  connectionId,
+  modelsJson,
+}: {
+  connectionId: string;
+  modelsJson: UserLlmModelCache["modelsJson"];
+}): Promise<UserLlmModelCache> {
+  const now = new Date();
+
+  try {
+    const existingCaches = await db
+      .select({ id: userLlmModelCache.id })
+      .from(userLlmModelCache)
+      .where(eq(userLlmModelCache.connectionId, connectionId))
+      .orderBy(desc(userLlmModelCache.fetchedAt));
+
+    const [primaryCache, ...duplicateCaches] = existingCaches;
+
+    if (duplicateCaches.length > 0) {
+      await db.delete(userLlmModelCache).where(
+        inArray(
+          userLlmModelCache.id,
+          duplicateCaches.map((cache) => cache.id)
+        )
+      );
+    }
+
+    if (primaryCache) {
+      const [updatedCache] = await db
+        .update(userLlmModelCache)
+        .set({ modelsJson, fetchedAt: now })
+        .where(eq(userLlmModelCache.id, primaryCache.id))
+        .returning();
+
+      if (!updatedCache) {
+        throw new OpenChatError(
+          "bad_request:database",
+          "No model cache returned after update"
+        );
+      }
+
+      return updatedCache;
+    }
+
+    const [createdCache] = await db
+      .insert(userLlmModelCache)
+      .values({
+        connectionId,
+        modelsJson,
+        fetchedAt: now,
+      } satisfies NewUserLlmModelCache)
+      .returning();
+
+    if (!createdCache) {
+      throw new OpenChatError(
+        "bad_request:database",
+        "No model cache returned after insert"
+      );
+    }
+
+    return createdCache;
+  } catch (error) {
+    if (error instanceof OpenChatError) {
+      throw error;
+    }
+
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to save user LLM model cache"
+    );
+  }
+}
+
+export async function updateUserLlmConnectionValidation({
+  id,
+  userId,
+  lastValidationError,
+}: {
+  id: string;
+  userId: string;
+  lastValidationError: string | null;
+}) {
+  try {
+    await db
+      .update(userLlmConnection)
+      .set({
+        lastValidatedAt: new Date(),
+        lastValidationError,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(userLlmConnection.id, id), eq(userLlmConnection.userId, userId))
+      );
+  } catch (_error) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to update user LLM connection validation"
+    );
+  }
+}
+
+export async function touchUserLlmConnectionLastUsed({
+  id,
+  userId,
+}: {
+  id: string;
+  userId: string;
+}) {
+  try {
+    await db
+      .update(userLlmConnection)
+      .set({
+        lastUsedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(userLlmConnection.id, id), eq(userLlmConnection.userId, userId))
+      );
+  } catch (_error) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to update user LLM connection last used"
     );
   }
 }

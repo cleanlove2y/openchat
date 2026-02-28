@@ -1,5 +1,6 @@
 {
   "tooltip.deleteAllChats": "Delete All Chats",
+  "tooltip.settings": "Settings",
   "tooltip.newChat": "New Chat",
   "toast.deleteAllLoading": "Deleting all chats...",
   "toast.deleteAllSuccess": "All chats deleted successfully",
@@ -33,5 +34,6 @@
   "user.toggleTheme": "Toggle {{mode}} mode",
   "user.authChecking": "Checking authentication status, please try again!",
   "user.login": "Login to your account",
-  "user.signOut": "Sign out"
+  "user.signOut": "Sign out",
+  "nav.settings": "Settings"
 }

@@ -19,5 +19,8 @@
   "input.waitModel": "Please wait for the model to finish its response!",
   "upload.failed": "Failed to upload file, please try again!",
   "upload.failedPasted": "Failed to upload pasted image(s)",
-  "model.searchPlaceholder": "Search models..."
+  "model.searchPlaceholder": "Search models...",
+  "model.empty": "No models found.",
+  "model.group.user": "My Models",
+  "model.group.system": "System Models"
 }
