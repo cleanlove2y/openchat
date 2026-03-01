@@ -13,7 +13,7 @@ export default function Page(props: {
   params: Promise<{ id: string; locale?: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="flex h-dvh" />}>
+    <Suspense fallback={<div className="flex min-h-0 flex-1" />}>
       <ChatPage params={props.params} />
     </Suspense>
   );

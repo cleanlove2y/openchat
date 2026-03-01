@@ -1,150 +1,90 @@
 "use client";
 
+import { SquarePen } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { User } from "next-auth";
-import { useState } from "react";
-import { toast } from "sonner";
-import { useSWRConfig } from "swr";
-import { unstable_serialize } from "swr/infinite";
-import { PlusIcon, TrashIcon } from "@/components/icons";
-import {
-  getChatHistoryPaginationKey,
-  SidebarHistory,
-} from "@/components/sidebar-history";
+import { getSidebarPrimaryRoutes } from "@/components/app-sidebar-nav";
+import { SidebarHistory } from "@/components/sidebar-history";
+import { SidebarToggle } from "@/components/sidebar-toggle";
 import { SidebarUserNav } from "@/components/sidebar-user-nav";
-import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useAppTranslation } from "@/lib/i18n/hooks";
 import { localizePathFromPathname } from "@/lib/i18n/navigation";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "./ui/alert-dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export function AppSidebar({ user }: { user: User | undefined }) {
   const router = useRouter();
   const pathname = usePathname();
   const { t } = useAppTranslation(["sidebar", "common"]);
   const { setOpenMobile } = useSidebar();
-  const { mutate } = useSWRConfig();
-  const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
-
-  const handleDeleteAll = () => {
-    const deletePromise = fetch("/api/history", {
-      method: "DELETE",
-    });
-
-    toast.promise(deletePromise, {
-      loading: t("toast.deleteAllLoading"),
-      success: () => {
-        mutate(unstable_serialize(getChatHistoryPaginationKey));
-        setShowDeleteAllDialog(false);
-        router.replace(localizePathFromPathname(pathname, "/"));
-        router.refresh();
-        return t("toast.deleteAllSuccess");
-      },
-      error: t("toast.deleteAllError"),
-    });
-  };
+  const primaryRoutes = getSidebarPrimaryRoutes(pathname, t("tooltip.newChat"));
 
   return (
-    <>
-      <Sidebar className="group-data-[side=left]:border-r-0">
-        <SidebarHeader>
-          <SidebarMenu>
-            <div className="flex flex-row items-center justify-between">
-              <Link
-                className="flex flex-row items-center gap-3"
-                href={localizePathFromPathname(pathname, "/")}
-                onClick={() => {
-                  setOpenMobile(false);
-                }}
-              >
-                <span className="cursor-pointer rounded-md px-2 font-semibold text-lg hover:bg-muted">
-                  OpenChat
-                </span>
-              </Link>
-              <div className="flex flex-row items-center gap-1">
-                {user && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        className="h-8 p-1 md:h-fit md:p-2"
-                        onClick={() => setShowDeleteAllDialog(true)}
-                        type="button"
-                        variant="ghost"
-                      >
-                        <TrashIcon />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent align="end" className="hidden md:block">
-                      {t("tooltip.deleteAllChats")}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      className="h-8 p-1 md:h-fit md:p-2"
-                      onClick={() => {
-                        setOpenMobile(false);
-                        router.push(localizePathFromPathname(pathname, "/"));
-                        router.refresh();
-                      }}
-                      type="button"
-                      variant="ghost"
-                    >
-                      <PlusIcon />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent align="end" className="hidden md:block">
-                    {t("tooltip.newChat")}
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          </SidebarMenu>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarHistory user={user} />
-        </SidebarContent>
-        <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
-      </Sidebar>
+    <Sidebar className="group-data-[side=left]:border-r-0" collapsible="icon">
+      <SidebarHeader className="bg-sidebar">
+        <div className="flex flex-row items-center justify-between h-9 px-1">
+          <Link
+            className="flex min-w-0 flex-1 flex-row items-center gap-2 group-data-[collapsible=icon]:hidden pl-2"
+            href={localizePathFromPathname(pathname, "/")}
+            onClick={() => {
+              setOpenMobile(false);
+            }}
+          >
+            <span className="truncate font-semibold text-lg hover:text-sidebar-accent-foreground/80 transition-colors">
+              OpenChat
+            </span>
+          </Link>
+          <div className="flex items-center justify-center shrink-0 group-data-[collapsible=icon]:w-full transition-all">
+            <SidebarToggle />
+          </div>
+        </div>
+      </SidebarHeader>
 
-      <AlertDialog
-        onOpenChange={setShowDeleteAllDialog}
-        open={showDeleteAllDialog}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("dialog.deleteAllTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("dialog.deleteAllDescription")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("common:action.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteAll}>
-              {t("dialog.deleteAllConfirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+      <SidebarContent>
+        <SidebarGroup className="px-2 pt-2 pb-1">
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1">
+              {primaryRoutes.map((route) => (
+                <SidebarMenuItem key={route.href}>
+                  <SidebarMenuButton
+                    className="h-9 rounded-lg px-3 font-medium"
+                    isActive={route.isActive}
+                    onClick={() => {
+                      setOpenMobile(false);
+                      router.push(route.href);
+
+                      if (route.shouldRefresh) {
+                        router.refresh();
+                      }
+                    }}
+                    size="default"
+                    tooltip={route.label}
+                    type="button"
+                    variant="default"
+                  >
+                    <SquarePen className="size-4" />
+                    <span>{route.label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarHistory user={user} />
+      </SidebarContent>
+
+      <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
+    </Sidebar>
   );
 }

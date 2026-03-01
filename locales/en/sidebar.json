@@ -1,7 +1,7 @@
 {
   "tooltip.deleteAllChats": "Delete All Chats",
   "tooltip.settings": "Settings",
-  "tooltip.newChat": "New Chat",
+  "tooltip.newChat": "New chat",
   "toast.deleteAllLoading": "Deleting all chats...",
   "toast.deleteAllSuccess": "All chats deleted successfully",
   "toast.deleteAllError": "Failed to delete all chats",
@@ -13,6 +13,7 @@
   "history.deleteError": "Failed to delete chat",
   "history.guestPrompt": "Login to save and revisit previous chats!",
   "history.emptyPrompt": "Your conversations will appear here once you start chatting!",
+  "history.title": "Chats",
   "history.group.today": "Today",
   "history.group.yesterday": "Yesterday",
   "history.group.last7Days": "Last 7 days",

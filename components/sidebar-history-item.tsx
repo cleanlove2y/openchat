@@ -34,11 +34,13 @@ const PureChatItem = ({
   isActive,
   onDelete,
   setOpenMobile,
+  buttonClassName,
 }: {
   chat: Chat;
   isActive: boolean;
   onDelete: (chatId: string) => void;
   setOpenMobile: (open: boolean) => void;
+  buttonClassName?: string;
 }) => {
   const pathname = usePathname();
   const { t } = useAppTranslation("sidebar");
@@ -49,7 +51,11 @@ const PureChatItem = ({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={isActive}>
+      <SidebarMenuButton
+        asChild
+        className={buttonClassName}
+        isActive={isActive}
+      >
         <Link
           href={localizePathFromPathname(pathname, `/chat/${chat.id}`)}
           onClick={() => setOpenMobile(false)}
@@ -69,7 +75,7 @@ const PureChatItem = ({
           </SidebarMenuAction>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="end" side="bottom">
+        <DropdownMenuContent align="start" side="right" sideOffset={8}>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="cursor-pointer">
               <ShareIcon />

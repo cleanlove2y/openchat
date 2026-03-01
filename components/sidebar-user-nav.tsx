@@ -59,12 +59,14 @@ export function SidebarUserNav({ user }: { user: User }) {
       {user.type === "regular" && (
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
+            <SidebarMenuButton asChild tooltip={t("nav.settings")}>
               <Link
                 href={localizePathFromPathname(currentPathname, "/settings")}
               >
                 <Settings className="size-4" />
-                <span>{t("nav.settings")}</span>
+                <span className="group-data-[collapsible=icon]:hidden">
+                  {t("nav.settings")}
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -75,20 +77,24 @@ export function SidebarUserNav({ user }: { user: User }) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton
-                className="h-10 bg-background data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                className="h-10 bg-background data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground transition-all"
                 data-testid="user-nav-button"
+                tooltip={(isGuest ? t("user.guest") : user?.email) || ""}
               >
                 <Image
                   alt={user.email ?? t("user.avatarAlt")}
-                  className="rounded-full"
+                  className="rounded-full shrink-0"
                   height={24}
                   src={`https://avatar.vercel.sh/${user.email}`}
                   width={24}
                 />
-                <span className="truncate" data-testid="user-email">
+                <span
+                  className="truncate group-data-[collapsible=icon]:hidden"
+                  data-testid="user-email"
+                >
                   {isGuest ? t("user.guest") : user?.email}
                 </span>
-                <ChevronUp className="ml-auto" />
+                <ChevronUp className="ml-auto group-data-[collapsible=icon]:hidden" />
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent

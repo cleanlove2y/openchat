@@ -1,7 +1,7 @@
 {
   "tooltip.deleteAllChats": "删除全部对话",
   "tooltip.settings": "设置",
-  "tooltip.newChat": "新建对话",
+  "tooltip.newChat": "新聊天",
   "toast.deleteAllLoading": "正在删除全部对话...",
   "toast.deleteAllSuccess": "已成功删除全部对话",
   "toast.deleteAllError": "删除全部对话失败",
@@ -13,6 +13,7 @@
   "history.deleteError": "对话删除失败",
   "history.guestPrompt": "登录后可保存并回看历史对话！",
   "history.emptyPrompt": "开始对话后，你的会话记录会显示在这里！",
+  "history.title": "你的聊天",
   "history.group.today": "今天",
   "history.group.yesterday": "昨天",
   "history.group.last7Days": "近 7 天",

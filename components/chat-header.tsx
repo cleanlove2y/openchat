@@ -1,73 +1,23 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
 import { memo } from "react";
-import { useWindowSize } from "usehooks-ts";
-import { SidebarToggle } from "@/components/sidebar-toggle";
-import { Button } from "@/components/ui/button";
-import { useAppTranslation } from "@/lib/i18n/hooks";
-import { localizePathFromPathname } from "@/lib/i18n/navigation";
-import { PlusIcon, VercelIcon } from "./icons";
-import { useSidebar } from "./ui/sidebar";
-import { VisibilitySelector, type VisibilityType } from "./visibility-selector";
+import type { VisibilityType } from "./visibility-selector";
 
-function PureChatHeader({
-  chatId,
-  selectedVisibilityType,
-  isReadonly,
-}: {
+type ChatHeaderProps = {
   chatId: string;
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
-}) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { t } = useAppTranslation("chat");
-  const { open } = useSidebar();
+};
 
-  const { width: windowWidth } = useWindowSize();
-
+function PureChatHeader({
+  chatId: _chatId,
+  selectedVisibilityType: _selectedVisibilityType,
+  isReadonly: _isReadonly,
+}: ChatHeaderProps) {
   return (
-    <header className="sticky top-0 flex items-center gap-2 bg-background px-2 py-1.5 md:px-2">
-      <SidebarToggle />
-
-      {(!open || windowWidth < 768) && (
-        <Button
-          className="order-2 ml-auto h-8 px-2 md:order-1 md:ml-0 md:h-fit md:px-2"
-          onClick={() => {
-            router.push(localizePathFromPathname(pathname, "/"));
-            router.refresh();
-          }}
-          variant="outline"
-        >
-          <PlusIcon />
-          <span className="md:sr-only">{t("header.newChat")}</span>
-        </Button>
-      )}
-
-      {!isReadonly && (
-        <VisibilitySelector
-          chatId={chatId}
-          className="order-1 md:order-2"
-          selectedVisibilityType={selectedVisibilityType}
-        />
-      )}
-
-      <Button
-        asChild
-        className="order-3 hidden bg-zinc-900 px-2 text-zinc-50 hover:bg-zinc-800 md:ml-auto md:flex md:h-fit dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-      >
-        <Link
-          href={"https://vercel.com/templates/next.js/openchat"}
-          rel="noreferrer"
-          target="_noblank"
-        >
-          <VercelIcon size={16} />
-          {t("header.deployWithVercel")}
-        </Link>
-      </Button>
-    </header>
+    <div className="flex items-center gap-2 bg-background px-2 py-1.5 md:px-2">
+      {/* 功能按钮已按需移除以保持极致简洁的视觉效果 */}
+    </div>
   );
 }
 

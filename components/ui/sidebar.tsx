@@ -2,6 +2,7 @@
 
 import { cva, type VariantProps } from "class-variance-authority";
 import { PanelLeft } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { Slot as SlotPrimitive } from "radix-ui";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
@@ -73,7 +74,9 @@ const SidebarProvider = React.forwardRef<
     ref
   ) => {
     const isMobile = useIsMobile();
+    const pathname = usePathname();
     const [openMobile, setOpenMobile] = React.useState(false);
+    const previousPathnameRef = React.useRef(pathname);
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
@@ -116,6 +119,20 @@ const SidebarProvider = React.forwardRef<
       window.addEventListener("keydown", handleKeyDown);
       return () => window.removeEventListener("keydown", handleKeyDown);
     }, [toggleSidebar]);
+
+    React.useEffect(() => {
+      if (previousPathnameRef.current !== pathname) {
+        previousPathnameRef.current = pathname;
+
+        if (isMobile && openMobile) {
+          setOpenMobile(false);
+        }
+
+        return;
+      }
+
+      previousPathnameRef.current = pathname;
+    }, [isMobile, openMobile, pathname]);
 
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.

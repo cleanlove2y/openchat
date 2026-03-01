@@ -45,6 +45,11 @@ export type ChatHistory = {
 };
 
 const PAGE_SIZE = 20;
+const historyTitleClassName =
+  "pl-3 pr-2 pb-5 text-sidebar-foreground/60 font-semibold text-xs tracking-wide";
+const historyGroupLabelClassName =
+  "pl-3 pr-2 pt-2 pb-1 text-sidebar-foreground/45 font-medium text-xs";
+const historyItemButtonClassName = "pl-3 pr-2";
 
 const groupChatsByDate = (chats: Chat[]): GroupedChats => {
   const now = new Date();
@@ -180,8 +185,9 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 
   if (isLoading) {
     return (
-      <SidebarGroup>
-        <div className="px-2 py-1 text-sidebar-foreground/50 text-xs">
+      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+        <div className={historyTitleClassName}>{t("history.title")}</div>
+        <div className={historyGroupLabelClassName}>
           {t("history.group.today")}
         </div>
         <SidebarGroupContent>
@@ -209,7 +215,8 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 
   if (hasEmptyChatHistory) {
     return (
-      <SidebarGroup>
+      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+        <div className={historyTitleClassName}>{t("history.title")}</div>
         <SidebarGroupContent>
           <div className="flex w-full flex-row items-center justify-center gap-2 px-2 text-sm text-zinc-500">
             {t("history.emptyPrompt")}
@@ -221,8 +228,9 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 
   return (
     <>
-      <SidebarGroup>
+      <SidebarGroup className="px-2 pt-6 pb-1 group-data-[collapsible=icon]:hidden">
         <SidebarGroupContent>
+          <div className={historyTitleClassName}>{t("history.title")}</div>
           <SidebarMenu>
             {paginatedChatHistories &&
               (() => {
@@ -233,14 +241,15 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                 const groupedChats = groupChatsByDate(chatsFromHistory);
 
                 return (
-                  <div className="flex flex-col gap-6">
+                  <div className="flex flex-col gap-7">
                     {groupedChats.today.length > 0 && (
                       <div>
-                        <div className="px-2 py-1 text-sidebar-foreground/50 text-xs">
+                        <div className={historyGroupLabelClassName}>
                           {t("history.group.today")}
                         </div>
                         {groupedChats.today.map((chat) => (
                           <ChatItem
+                            buttonClassName={historyItemButtonClassName}
                             chat={chat}
                             isActive={chat.id === id}
                             key={chat.id}
@@ -256,11 +265,12 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 
                     {groupedChats.yesterday.length > 0 && (
                       <div>
-                        <div className="px-2 py-1 text-sidebar-foreground/50 text-xs">
+                        <div className={historyGroupLabelClassName}>
                           {t("history.group.yesterday")}
                         </div>
                         {groupedChats.yesterday.map((chat) => (
                           <ChatItem
+                            buttonClassName={historyItemButtonClassName}
                             chat={chat}
                             isActive={chat.id === id}
                             key={chat.id}
@@ -276,11 +286,12 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 
                     {groupedChats.lastWeek.length > 0 && (
                       <div>
-                        <div className="px-2 py-1 text-sidebar-foreground/50 text-xs">
+                        <div className={historyGroupLabelClassName}>
                           {t("history.group.last7Days")}
                         </div>
                         {groupedChats.lastWeek.map((chat) => (
                           <ChatItem
+                            buttonClassName={historyItemButtonClassName}
                             chat={chat}
                             isActive={chat.id === id}
                             key={chat.id}
@@ -296,11 +307,12 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 
                     {groupedChats.lastMonth.length > 0 && (
                       <div>
-                        <div className="px-2 py-1 text-sidebar-foreground/50 text-xs">
+                        <div className={historyGroupLabelClassName}>
                           {t("history.group.last30Days")}
                         </div>
                         {groupedChats.lastMonth.map((chat) => (
                           <ChatItem
+                            buttonClassName={historyItemButtonClassName}
                             chat={chat}
                             isActive={chat.id === id}
                             key={chat.id}
@@ -316,11 +328,12 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 
                     {groupedChats.older.length > 0 && (
                       <div>
-                        <div className="px-2 py-1 text-sidebar-foreground/50 text-xs">
+                        <div className={historyGroupLabelClassName}>
                           {t("history.group.olderThanLastMonth")}
                         </div>
                         {groupedChats.older.map((chat) => (
                           <ChatItem
+                            buttonClassName={historyItemButtonClassName}
                             chat={chat}
                             isActive={chat.id === id}
                             key={chat.id}
