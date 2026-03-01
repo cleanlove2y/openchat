@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import { AuthForm } from "@/components/auth-form";
 import { SubmitButton } from "@/components/submit-button";
@@ -12,12 +11,10 @@ import { localizePathFromPathname } from "@/lib/i18n/navigation";
 import { type RegisterActionState, register } from "@/lib/server/auth/actions";
 
 export default function Page() {
-  const router = useRouter();
   const pathname = usePathname();
   const { t } = useAppTranslation("auth");
 
   const [email, setEmail] = useState("");
-  const [isSuccessful, setIsSuccessful] = useState(false);
 
   const [state, formAction] = useActionState<RegisterActionState, FormData>(
     register,
@@ -25,27 +22,28 @@ export default function Page() {
       status: "idle",
     }
   );
-
-  const { update: updateSession } = useSession();
+  const redirectTo = localizePathFromPathname(pathname, "/");
 
   useEffect(() => {
+    if (state.status === "idle" || state.status === "success") {
+      return;
+    }
+
     if (state.status === "user_exists") {
       toast({ type: "error", description: t("toast.accountExists") });
-    } else if (state.status === "failed") {
+    }
+
+    if (state.status === "failed") {
       toast({ type: "error", description: t("toast.createFailed") });
-    } else if (state.status === "invalid_data") {
+    }
+
+    if (state.status === "invalid_data") {
       toast({
         type: "error",
         description: t("toast.invalidSubmission"),
       });
-    } else if (state.status === "success") {
-      toast({ type: "success", description: t("toast.createSuccess") });
-
-      setIsSuccessful(true);
-      updateSession();
-      router.refresh();
     }
-  }, [state.status, router, t, updateSession]);
+  }, [state, t]);
 
   const handleSubmit = (formData: FormData) => {
     setEmail(formData.get("email") as string);
@@ -70,7 +68,8 @@ export default function Page() {
           emailPlaceholder={t("form.emailPlaceholder")}
           passwordLabel={t("form.passwordLabel")}
         >
-          <SubmitButton isSuccessful={isSuccessful}>
+          <input name="redirectTo" type="hidden" value={redirectTo} />
+          <SubmitButton isSuccessful={false}>
             {t("register.submit")}
           </SubmitButton>
           <p className="mt-4 text-center text-gray-600 text-sm dark:text-zinc-400">

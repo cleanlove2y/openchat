@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, type NextResponse } from "next/server";
 import { proxy } from "./proxy";
 
 test("redirects non-localized page requests to locale-prefixed path", async () => {
@@ -32,6 +32,16 @@ test("prefers locale cookie over accept-language when redirecting page requests"
 
   assert.equal(response.status, 307);
   assert.equal(response.headers.get("location"), "http://localhost/zh/login");
+  assert.equal(response.cookies.get("OPENCHAT_LOCALE")?.value, "zh");
+});
+
+test("allows localized login pages to render without creating a guest session", async () => {
+  const request = new NextRequest("http://localhost/zh/login");
+
+  const response = (await proxy(request)) as NextResponse;
+
+  assert.equal(response.headers.get("location"), null);
+  assert.equal(response.headers.get("x-middleware-next"), "1");
   assert.equal(response.cookies.get("OPENCHAT_LOCALE")?.value, "zh");
 });
 

@@ -12,6 +12,7 @@ import {
 const PUBLIC_FILE_REGEX = /\.[^/]+$/;
 const SEGMENT_SCOPED_METADATA_FILE_REGEX =
   /^(?:opengraph-image|twitter-image|icon\d*|apple-icon\d*)(?:\.(?:ico|jpg|jpeg|png|gif|svg|txt))?$/i;
+const PUBLIC_AUTH_PATHS = new Set(["/login", "/register"]);
 
 function isSegmentScopedMetadataFile(pathname: string): boolean {
   const filename = pathname.split("/").at(-1);
@@ -108,6 +109,12 @@ export async function proxy(request: NextRequest) {
   });
 
   if (!token) {
+    if (PUBLIC_AUTH_PATHS.has(normalizedPathname)) {
+      const response = NextResponse.next();
+      setLocaleCookie(response, resolvedLocale);
+      return response;
+    }
+
     const redirectUrl = encodeURIComponent(request.url);
 
     const response = NextResponse.redirect(
