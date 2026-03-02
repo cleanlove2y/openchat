@@ -18,7 +18,12 @@ import {
 } from "@/app/api/_shared/authed-route";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
 import { isReasoningModelId } from "@/lib/ai/models";
-import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
+import {
+  buildEffectiveSystemPrompt,
+  buildExplicitSkillsContextPrompt,
+  type RequestHints,
+  systemPrompt,
+} from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
 import {
   buildSkillsSystemPrompt,
@@ -163,26 +168,6 @@ function removeEmptyModelMessages(
     // (for example, chat title metadata) that convert into empty model messages.
     return !Array.isArray(content) || content.length > 0;
   });
-}
-
-function buildExplicitSkillsSystemPrompt(
-  loadedSkills: Array<{ name: string; content: string }>
-): string {
-  if (loadedSkills.length === 0) {
-    return "";
-  }
-
-  const skillBlocks = loadedSkills
-    .map((loadedSkill) =>
-      [`### Skill: ${loadedSkill.name}`, loadedSkill.content].join("\n")
-    )
-    .join("\n\n");
-
-  return [
-    "Explicit Skills Context:",
-    "The user explicitly selected these skills for this request.",
-    skillBlocks,
-  ].join("\n\n");
 }
 
 function trimMessagesForRegenerate({
@@ -436,17 +421,15 @@ const postHandler = async ({
   const skillsSystemPrompt = skillToolingEnabled
     ? buildSkillsSystemPrompt(skillsSnapshot.skills)
     : "";
-  const explicitSkillsSystemPrompt = buildExplicitSkillsSystemPrompt(
+  const explicitSkillsSystemPrompt = buildExplicitSkillsContextPrompt(
     explicitlyLoadedSkills
   );
   const baseSystemPrompt = systemPrompt({ selectedChatModel, requestHints });
-  const effectiveSystemPrompt = [
+  const effectiveSystemPrompt = buildEffectiveSystemPrompt([
     baseSystemPrompt,
     skillsSystemPrompt,
     explicitSkillsSystemPrompt,
-  ]
-    .filter((section) => section.length > 0)
-    .join("\n\n");
+  ]);
 
   const executeLoadSkill = async ({
     name,

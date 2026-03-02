@@ -3,6 +3,7 @@ import { parseSkillDocument } from "./parser";
 import { withTimeout } from "./security";
 import { recordLoadSkillInvocation } from "./telemetry";
 import type { LoadedSkill, SkillMetadata, SkillsConfig } from "./types";
+import { buildSkillsSystemPromptText } from "../prompts/skills";
 
 export function shouldEnableSkillTooling(
   enabled: boolean,
@@ -13,28 +14,7 @@ export function shouldEnableSkillTooling(
 }
 
 export function buildSkillsSystemPrompt(skills: SkillMetadata[]): string {
-  if (skills.length === 0) {
-    return "";
-  }
-
-  const skillList = skills
-    .map(
-      (skill) =>
-        `- ${skill.name}: ${skill.description} (source: ${skill.source}, path: ${skill.skillDir})`
-    )
-    .join("\n");
-
-  return [
-    "Skills System:",
-    "Use these skills only when relevant.",
-    "Workflow:",
-    "1) Match user intent against skill descriptions.",
-    "2) Call `loadSkill` with the exact skill name (camelCase only).",
-    "3) Do NOT call `load_skill`, `load-skill`, or any other tool-name variant.",
-    "4) Follow loaded instructions and referenced assets.",
-    "Available skills:",
-    skillList,
-  ].join("\n");
+  return buildSkillsSystemPromptText(skills);
 }
 
 export async function loadSkillByName(

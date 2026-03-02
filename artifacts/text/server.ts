@@ -1,5 +1,9 @@
 import { smoothStream, streamText } from "ai";
-import { updateDocumentPrompt } from "@/lib/ai/prompts";
+import {
+  buildDocumentUpdateContentPrompt,
+  textDocumentCreatePrompt,
+  updateDocumentPrompt,
+} from "@/lib/ai/prompts";
 import { getArtifactModel } from "@/lib/ai/providers";
 import { createDocumentHandler } from "@/lib/artifacts/server";
 
@@ -10,8 +14,7 @@ export const textDocumentHandler = createDocumentHandler<"text">({
 
     const { fullStream } = streamText({
       model: getArtifactModel(),
-      system:
-        "Write about the given topic. Markdown is supported. Use headings wherever appropriate.",
+      system: textDocumentCreatePrompt,
       experimental_transform: smoothStream({ chunking: "word" }),
       prompt: title,
     });
@@ -39,9 +42,9 @@ export const textDocumentHandler = createDocumentHandler<"text">({
 
     const { fullStream } = streamText({
       model: getArtifactModel(),
-      system: updateDocumentPrompt(document.content, "text"),
+      system: updateDocumentPrompt("text"),
       experimental_transform: smoothStream({ chunking: "word" }),
-      prompt: description,
+      prompt: buildDocumentUpdateContentPrompt(document.content, description),
       providerOptions: {
         openai: {
           prediction: {
