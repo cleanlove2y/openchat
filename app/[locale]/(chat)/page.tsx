@@ -17,6 +17,7 @@ async function NewChatPage() {
   const cookieStore = await cookies();
   const modelIdFromCookie = cookieStore.get("chat-model");
   const id = generateUUID();
+  const supportsResumableStream = Boolean(process.env.REDIS_URL);
 
   if (!modelIdFromCookie) {
     return (
@@ -29,6 +30,7 @@ async function NewChatPage() {
           initialVisibilityType="private"
           isReadonly={false}
           key={id}
+          supportsResumableStream={supportsResumableStream}
         />
         <DataStreamHandler />
       </>
@@ -45,6 +47,7 @@ async function NewChatPage() {
         initialVisibilityType="private"
         isReadonly={false}
         key={id}
+        supportsResumableStream={supportsResumableStream}
       />
       <DataStreamHandler />
     </>

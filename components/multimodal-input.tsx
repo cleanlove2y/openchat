@@ -10,7 +10,6 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
-import { usePathname } from "next/navigation";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -48,7 +47,6 @@ import {
   isReasoningModelId,
 } from "@/lib/ai/models";
 import { useAppTranslation } from "@/lib/i18n/hooks";
-import { localizePathFromPathname } from "@/lib/i18n/navigation";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import {
   decodeUserConnectionModelId,
@@ -179,7 +177,6 @@ function PureMultimodalInput({
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
 }) {
-  const pathname = usePathname();
   const { t } = useAppTranslation("chat");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
@@ -268,12 +265,6 @@ function PureMultimodalInput({
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
 
   const submitForm = useCallback(() => {
-    window.history.pushState(
-      null,
-      "",
-      localizePathFromPathname(pathname, `/chat/${chatId}`)
-    );
-
     const commandPrefix =
       selectedSlashCommands.length > 0
         ? `${selectedSlashCommands.map((c) => `[Use Skill: ${c.id}]`).join("\n")}\n\n`
@@ -315,7 +306,6 @@ function PureMultimodalInput({
     chatId,
     resetHeight,
     selectedSlashCommands,
-    pathname,
   ]);
 
   const uploadFile = useCallback(

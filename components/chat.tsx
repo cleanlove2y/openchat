@@ -3,7 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { unstable_serialize } from "swr/infinite";
 import { ChatHeader } from "@/components/chat-header";
@@ -18,7 +18,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useArtifactSelector } from "@/hooks/use-artifact";
-import { useAutoResume } from "@/hooks/use-auto-resume";
+import {
+  shouldResumeExistingStream,
+  useAutoResume,
+} from "@/hooks/use-auto-resume";
 import { useChatVisibility } from "@/hooks/use-chat-visibility";
 import type { Vote } from "@/lib/db/schema";
 import { OpenChatError } from "@/lib/errors";
@@ -41,6 +44,7 @@ export function Chat({
   initialVisibilityType,
   isReadonly,
   autoResume,
+  supportsResumableStream,
 }: {
   id: string;
   initialMessages: ChatMessage[];
@@ -48,6 +52,7 @@ export function Chat({
   initialVisibilityType: VisibilityType;
   isReadonly: boolean;
   autoResume: boolean;
+  supportsResumableStream: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -75,6 +80,13 @@ export function Chat({
   const [input, setInput] = useState<string>("");
   const [showCreditCardAlert, setShowCreditCardAlert] = useState(false);
   const [currentModelId, setCurrentModelId] = useState(initialChatModel);
+  const shouldAutoResume = autoResume && supportsResumableStream;
+  const [isAutoResuming, setIsAutoResuming] = useState(() =>
+    shouldResumeExistingStream({
+      autoResume: shouldAutoResume,
+      initialMessages,
+    })
+  );
   const currentModelIdRef = useRef(currentModelId);
 
   useEffect(() => {
@@ -144,6 +156,13 @@ export function Chat({
       setDataStream((ds) => (ds ? [...ds, dataPart] : []));
     },
     onFinish: () => {
+      if (!supportsResumableStream) {
+        window.history.replaceState(
+          null,
+          "",
+          localizePathFromPathname(pathname, `/chat/${id}`)
+        );
+      }
       mutate(unstable_serialize(getChatHistoryPaginationKey));
     },
     onError: (error) => {
@@ -164,24 +183,39 @@ export function Chat({
 
   const searchParams = useSearchParams();
   const query = searchParams.get("query");
+  const sendMessageWithNavigation = useCallback(
+    (...args: Parameters<typeof sendMessage>) => {
+      const targetPath = localizePathFromPathname(pathname, `/chat/${id}`);
+
+      if (
+        supportsResumableStream &&
+        messages.length === 0 &&
+        pathname !== targetPath
+      ) {
+        window.history.pushState(
+          null,
+          "",
+          targetPath
+        );
+      }
+
+      return sendMessage(...args);
+    },
+    [id, messages.length, pathname, sendMessage, supportsResumableStream]
+  );
 
   const [hasAppendedQuery, setHasAppendedQuery] = useState(false);
 
   useEffect(() => {
     if (query && !hasAppendedQuery) {
-      sendMessage({
+      sendMessageWithNavigation({
         role: "user" as const,
         parts: [{ type: "text", text: query }],
       });
 
       setHasAppendedQuery(true);
-      window.history.replaceState(
-        null,
-        "",
-        localizePathFromPathname(pathname, `/chat/${id}`)
-      );
     }
-  }, [query, sendMessage, hasAppendedQuery, id, pathname]);
+  }, [query, sendMessageWithNavigation, hasAppendedQuery]);
 
   const { data: votes } = useSWR<Vote[]>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
@@ -190,12 +224,22 @@ export function Chat({
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
+  const handleAutoResumeStart = useCallback(() => {
+    setIsAutoResuming(true);
+  }, []);
+  const handleAutoResumeFinish = useCallback(() => {
+    setIsAutoResuming(false);
+  }, []);
+  const effectiveStatus =
+    isAutoResuming && status === "ready" ? "submitted" : status;
 
   useAutoResume({
-    autoResume,
+    autoResume: shouldAutoResume,
     initialMessages,
     resumeStream,
     setMessages,
+    onResumeStart: handleAutoResumeStart,
+    onResumeFinish: handleAutoResumeFinish,
   });
 
   return (
@@ -216,7 +260,7 @@ export function Chat({
           regenerate={regenerate}
           selectedModelId={initialChatModel}
           setMessages={setMessages}
-          status={status}
+          status={effectiveStatus}
           votes={votes}
         />
 
@@ -230,11 +274,11 @@ export function Chat({
               onModelChange={setCurrentModelId}
               selectedModelId={currentModelId}
               selectedVisibilityType={visibilityType}
-              sendMessage={sendMessage}
+              sendMessage={sendMessageWithNavigation}
               setAttachments={setAttachments}
               setInput={setInput}
               setMessages={setMessages}
-              status={status}
+              status={effectiveStatus}
               stop={stop}
             />
           )}
@@ -251,11 +295,11 @@ export function Chat({
         regenerate={regenerate}
         selectedModelId={currentModelId}
         selectedVisibilityType={visibilityType}
-        sendMessage={sendMessage}
+        sendMessage={sendMessageWithNavigation}
         setAttachments={setAttachments}
         setInput={setInput}
         setMessages={setMessages}
-        status={status}
+        status={effectiveStatus}
         stop={stop}
         votes={votes}
       />

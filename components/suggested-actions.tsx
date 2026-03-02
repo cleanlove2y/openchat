@@ -2,10 +2,8 @@
 
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { motion } from "framer-motion";
-import { usePathname } from "next/navigation";
 import { memo } from "react";
 import { useAppTranslation } from "@/lib/i18n/hooks";
-import { localizePathFromPathname } from "@/lib/i18n/navigation";
 import type { ChatMessage } from "@/lib/types";
 import { Suggestion } from "./elements/suggestion";
 import type { VisibilityType } from "./visibility-selector";
@@ -16,8 +14,7 @@ type SuggestedActionsProps = {
   selectedVisibilityType: VisibilityType;
 };
 
-function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
-  const pathname = usePathname();
+function PureSuggestedActions({ chatId: _chatId, sendMessage }: SuggestedActionsProps) {
   const { t } = useAppTranslation("chat");
 
   const suggestedActions = [
@@ -43,11 +40,6 @@ function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
           <Suggestion
             className="h-auto w-full whitespace-normal p-3 text-left"
             onClick={(suggestion) => {
-              window.history.pushState(
-                null,
-                "",
-                localizePathFromPathname(pathname, `/chat/${chatId}`)
-              );
               sendMessage({
                 role: "user",
                 parts: [{ type: "text", text: suggestion }],

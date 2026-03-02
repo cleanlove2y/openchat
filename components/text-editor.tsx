@@ -146,7 +146,10 @@ function PureEditor({
   }, [suggestions, content]);
 
   return (
-    <div className="prose dark:prose-invert relative" ref={containerRef} />
+    <div
+      className="prose dark:prose-invert artifact-prose relative"
+      ref={containerRef}
+    />
   );
 }
 

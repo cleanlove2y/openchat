@@ -111,7 +111,7 @@ const PurePreviewMessage = ({
         <div
           className={cn("relative flex flex-col", {
             "gap-2 md:gap-4": hasTextParts,
-            "w-full":
+            "flex-1 min-w-0":
               (message.role === "assistant" &&
                 (hasTextParts || hasToolParts || hasReasoningParts)) ||
               mode === "edit",
@@ -156,7 +156,7 @@ const PurePreviewMessage = ({
             )}
 
           {shouldShowEmptyCursor && (
-            <div className="not-prose flex w-full flex-col overflow-hidden rounded-lg border border-border/50 bg-[#121212] text-sm transition-all pointer-events-none mb-2 mt-2">
+            <div className="not-prose flex flex-1 min-w-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-[#121212] text-sm transition-all pointer-events-none mb-2 mt-2">
               <div className="flex items-center gap-2 px-3 py-2.5">
                 <RegenerateSparkIcon className="size-4 animate-spin text-blue-400" />
                 <span className="font-medium text-foreground/90">Thinking</span>
@@ -249,7 +249,7 @@ const PurePreviewMessage = ({
                     {(textContent.trim() || skills.length === 0) && (
                       <MessageContent
                         className={cn({
-                          "wrap-break-word w-fit rounded-2xl px-3 py-2 text-right text-white":
+                          "break-words w-fit rounded-2xl px-3 py-2 text-right text-white":
                             message.role === "user",
                           "bg-transparent px-0 py-0 text-left":
                             message.role === "assistant",
@@ -542,7 +542,7 @@ export const ThinkingMessage = ({
           </div>
         </div>
 
-        <div className="relative flex w-full flex-col p-4">
+        <div className="relative flex flex-1 min-w-0 flex-col p-4">
           <div
             className={cn(
               "not-prose relative h-10 w-full overflow-hidden rounded-lg border text-sm transition-colors duration-200",

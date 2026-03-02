@@ -37,9 +37,12 @@ export function DocumentPreview({
 
   const { data: documents, isLoading: isDocumentsFetching } = useSWR<
     Document[]
-  >(result ? `/api/document?id=${result.id}` : null, fetcher);
+  >(result ? `/api/document?id=${result.id}` : null, fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+  });
 
-  const previewDocument = useMemo(() => documents?.[0], [documents]);
+  const previewDocument = useMemo(() => documents?.at(-1), [documents]);
   const hitboxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -102,41 +105,44 @@ export function DocumentPreview({
   }
 
   return (
-    <div className="relative w-full max-w-[450px] cursor-pointer">
-      <HitboxLayer
-        hitboxRef={hitboxRef}
-        result={result}
-        setArtifact={setArtifact}
-      />
-      <DocumentHeader
-        isStreaming={artifact.status === "streaming"}
-        kind={document.kind}
-        title={document.title}
-      />
-      <DocumentContent document={document} />
+    <div className="group relative w-full max-w-full md:max-w-[800px] cursor-pointer transition-all duration-300 hover:scale-[1.005]">
+      <div className="absolute -inset-0.5 rounded-2xl bg-linear-to-r from-zinc-200 to-zinc-100 opacity-20 blur-sm transition duration-1000 group-hover:opacity-40 group-hover:duration-200 dark:from-zinc-800 dark:to-zinc-900" />
+      <div className="relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200 shadow-xl transition-shadow duration-300 group-hover:shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+        <HitboxLayer
+          hitboxRef={hitboxRef}
+          result={result}
+          setArtifact={setArtifact}
+        />
+        <DocumentHeader
+          isStreaming={artifact.status === "streaming"}
+          kind={document.kind}
+          title={document.title}
+        />
+        <DocumentContent document={document} />
+      </div>
     </div>
   );
 }
 
 const LoadingSkeleton = ({ artifactKind }: { artifactKind: ArtifactKind }) => (
-  <div className="w-full max-w-[450px]">
-    <div className="flex h-[57px] flex-row items-center justify-between gap-2 rounded-t-2xl border border-b-0 p-4 dark:border-zinc-700 dark:bg-muted">
+  <div className="w-full max-w-full md:max-w-[800px] overflow-hidden rounded-2xl border border-zinc-200 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex h-[57px] flex-row items-center justify-between gap-2 border-b p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
       <div className="flex flex-row items-center gap-3">
-        <div className="text-muted-foreground">
-          <div className="size-4 animate-pulse rounded-md bg-muted-foreground/20" />
+        <div className="text-muted-foreground/50">
+          <div className="size-4 animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800" />
         </div>
-        <div className="h-4 w-24 animate-pulse rounded-lg bg-muted-foreground/20" />
+        <div className="h-4 w-24 animate-pulse rounded-lg bg-zinc-200 dark:bg-zinc-800" />
       </div>
       <div>
-        <FullscreenIcon />
+        <FullscreenIcon className="opacity-20" />
       </div>
     </div>
     {artifactKind === "image" ? (
-      <div className="overflow-y-scroll rounded-b-2xl border border-t-0 bg-muted dark:border-zinc-700">
-        <div className="h-[257px] w-full animate-pulse bg-muted-foreground/20" />
+      <div className="bg-zinc-50 dark:bg-zinc-950">
+        <div className="h-[257px] w-full animate-pulse bg-zinc-100 dark:bg-zinc-900" />
       </div>
     ) : (
-      <div className="overflow-y-scroll rounded-b-2xl border border-t-0 bg-muted p-8 pt-4 dark:border-zinc-700">
+      <div className="bg-zinc-50 p-8 pt-4 dark:bg-zinc-950">
         <InlineDocumentSkeleton />
       </div>
     )}
@@ -182,13 +188,13 @@ const PureHitboxLayer = ({
   return (
     <div
       aria-hidden="true"
-      className="absolute top-0 left-0 z-10 size-full rounded-xl"
+      className="absolute inset-0 z-20"
       onClick={handleClick}
       ref={hitboxRef}
       role="presentation"
     >
-      <div className="flex w-full items-center justify-end p-4">
-        <div className="absolute top-[13px] right-[9px] rounded-md p-2 hover:bg-zinc-100 dark:hover:bg-zinc-700">
+      <div className="flex w-full items-center justify-end p-3 px-4">
+        <div className="rounded-full bg-zinc-100/50 p-2 text-zinc-500 backdrop-blur-sm transition-colors hover:bg-zinc-200/80 dark:bg-zinc-800/50 dark:text-zinc-400 dark:hover:bg-zinc-700/80">
           <FullscreenIcon />
         </div>
       </div>
@@ -212,22 +218,26 @@ const PureDocumentHeader = ({
   kind: ArtifactKind;
   isStreaming: boolean;
 }) => (
-  <div className="flex flex-row items-start justify-between gap-2 rounded-t-2xl border border-b-0 p-4 sm:items-center dark:border-zinc-700 dark:bg-muted">
-    <div className="flex flex-row items-start gap-3 sm:items-center">
-      <div className="text-muted-foreground">
+  <div className="flex flex-row items-center justify-between gap-4 border-b bg-zinc-50/80 p-4 backdrop-blur-sm sm:px-5 dark:border-zinc-800 dark:bg-zinc-900/80">
+    <div className="flex flex-row items-center gap-3 overflow-hidden min-w-0 text-sm font-medium">
+      <div className="flex size-6 flex-shrink-0 items-center justify-center rounded-lg bg-white shadow-xs dark:bg-zinc-800 dark:ring-1 dark:ring-zinc-700">
         {isStreaming ? (
-          <div className="animate-spin">
+          <div className="animate-spin text-zinc-500 dark:text-zinc-400">
             <LoaderIcon />
           </div>
         ) : kind === "image" ? (
-          <ImageIcon />
+          <div className="text-blue-500 dark:text-blue-400">
+            <ImageIcon />
+          </div>
         ) : (
-          <FileIcon />
+          <div className="text-zinc-600 dark:text-zinc-300">
+            <FileIcon />
+          </div>
         )}
       </div>
-      <div className="-translate-y-1 font-medium sm:translate-y-0">{title}</div>
+      <div className="truncate text-zinc-900 dark:text-zinc-100">{title}</div>
     </div>
-    <div className="w-8" />
+    <div className="w-8 shrink-0" />
   </div>
 );
 
@@ -246,10 +256,9 @@ const DocumentContent = ({ document }: { document: Document }) => {
   const { artifact } = useArtifact();
 
   const containerClassName = cn(
-    "h-[257px] overflow-y-scroll rounded-b-2xl border border-t-0 dark:border-zinc-700 dark:bg-muted",
+    "relative h-[320px] overflow-hidden bg-white dark:bg-zinc-950",
     {
-      "p-4 sm:px-14 sm:py-16": document.kind === "text",
-      "p-0": document.kind === "code",
+      "p-0": document.kind === "code" || document.kind === "sheet",
     }
   );
 
@@ -266,30 +275,41 @@ const DocumentContent = ({ document }: { document: Document }) => {
 
   return (
     <div className={containerClassName}>
-      {document.kind === "text" ? (
-        <Editor {...commonProps} onSaveContent={handleSaveContent} />
-      ) : document.kind === "code" ? (
-        <div className="relative flex w-full flex-1">
-          <div className="absolute inset-0">
-            <CodeEditor {...commonProps} onSaveContent={handleSaveContent} />
-          </div>
+      <div className="h-full overflow-hidden">
+        <div
+          className={cn({
+            "p-6 sm:px-10 sm:py-12": document.kind === "text",
+          })}
+        >
+          {document.kind === "text" ? (
+            <Editor {...commonProps} onSaveContent={handleSaveContent} />
+          ) : document.kind === "code" ? (
+            <div className="relative flex w-full flex-1 min-h-[320px]">
+              <div className="absolute inset-0">
+                <CodeEditor {...commonProps} onSaveContent={handleSaveContent} />
+              </div>
+            </div>
+          ) : document.kind === "sheet" ? (
+            <div className="relative flex size-full min-h-[320px] p-4">
+              <div className="absolute inset-0">
+                <SpreadsheetEditor {...commonProps} />
+              </div>
+            </div>
+          ) : document.kind === "image" ? (
+            <ImageEditor
+              content={document.content ?? ""}
+              currentVersionIndex={0}
+              isCurrentVersion={true}
+              isInline={true}
+              status={artifact.status}
+              title={document.title}
+            />
+          ) : null}
         </div>
-      ) : document.kind === "sheet" ? (
-        <div className="relative flex size-full flex-1 p-4">
-          <div className="absolute inset-0">
-            <SpreadsheetEditor {...commonProps} />
-          </div>
-        </div>
-      ) : document.kind === "image" ? (
-        <ImageEditor
-          content={document.content ?? ""}
-          currentVersionIndex={0}
-          isCurrentVersion={true}
-          isInline={true}
-          status={artifact.status}
-          title={document.title}
-        />
-      ) : null}
+      </div>
+      {document.kind === "text" && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-white to-transparent dark:from-zinc-950" />
+      )}
     </div>
   );
 };

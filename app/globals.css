@@ -334,3 +334,41 @@
 .thinking-dot {
   will-change: opacity, filter, box-shadow;
 }
+
+/* Artifact specialized prose styles */
+.prose.artifact-prose {
+  max-width: none;
+}
+
+.prose.artifact-prose h1 {
+  @apply text-3xl font-extrabold tracking-tight sm:text-4xl mb-6;
+  line-height: 1.1;
+}
+
+.prose.artifact-prose h2 {
+  @apply text-xl font-bold tracking-tight mt-10 mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800;
+}
+
+.prose.artifact-prose h3 {
+  @apply text-lg font-semibold mt-6 mb-3;
+}
+
+.prose.artifact-prose p {
+  @apply text-zinc-600 dark:text-zinc-400 leading-relaxed mb-4;
+}
+
+.prose.artifact-prose ul, .prose.artifact-prose ol {
+  @apply my-6 space-y-2;
+}
+
+.prose.artifact-prose li {
+  @apply text-zinc-600 dark:text-zinc-400;
+}
+
+.prose.artifact-prose blockquote {
+  @apply border-l-4 border-zinc-200 dark:border-zinc-700 italic pl-4 py-1 my-6 text-zinc-500;
+}
+
+.prose.artifact-prose hr {
+  @apply my-10 border-zinc-100 dark:border-zinc-800;
+}

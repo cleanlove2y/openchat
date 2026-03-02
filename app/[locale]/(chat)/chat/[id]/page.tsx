@@ -32,6 +32,7 @@ async function ChatPage({
 }: {
   params: Promise<{ id: string; locale?: string }>;
 }) {
+  const supportsResumableStream = Boolean(process.env.REDIS_URL);
   const { id, locale } = await params;
   const chat = await getChatById({ id });
 
@@ -71,12 +72,13 @@ async function ChatPage({
     return (
       <>
         <Chat
-          autoResume={true}
+          autoResume={supportsResumableStream}
           id={chat.id}
           initialChatModel={DEFAULT_CHAT_MODEL}
           initialMessages={uiMessages}
           initialVisibilityType={chat.visibility}
           isReadonly={session?.user?.id !== chat.userId}
+          supportsResumableStream={supportsResumableStream}
         />
         <DataStreamHandler />
       </>
@@ -86,12 +88,13 @@ async function ChatPage({
   return (
     <>
       <Chat
-        autoResume={true}
+        autoResume={supportsResumableStream}
         id={chat.id}
         initialChatModel={chatModelFromCookie.value}
         initialMessages={uiMessages}
         initialVisibilityType={chat.visibility}
         isReadonly={session?.user?.id !== chat.userId}
+        supportsResumableStream={supportsResumableStream}
       />
       <DataStreamHandler />
     </>

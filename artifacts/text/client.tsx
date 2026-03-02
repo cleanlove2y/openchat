@@ -12,7 +12,7 @@ import {
 } from "@/components/icons";
 import { Editor } from "@/components/text-editor";
 import type { Suggestion } from "@/lib/db/schema";
-import { getSuggestions } from "../actions";
+import { fetcher } from "@/lib/utils";
 
 type TextArtifactMetadata = {
   suggestions: Suggestion[];
@@ -22,11 +22,17 @@ export const textArtifact = new Artifact<"text", TextArtifactMetadata>({
   kind: "text",
   description: "Useful for text content, like drafting essays and emails.",
   initialize: async ({ documentId, setMetadata }) => {
-    const suggestions = await getSuggestions({ documentId });
+    try {
+      const suggestions = await fetcher(`/api/suggestions?documentId=${documentId}`);
 
-    setMetadata({
-      suggestions,
-    });
+      setMetadata({
+        suggestions,
+      });
+    } catch (_error) {
+      setMetadata({
+        suggestions: [],
+      });
+    }
   },
   onStreamPart: ({ streamPart, setMetadata, setArtifact }) => {
     if (streamPart.type === "data-suggestion") {

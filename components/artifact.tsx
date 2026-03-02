@@ -8,6 +8,7 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import useSWR, { useSWRConfig } from "swr";
@@ -92,12 +93,15 @@ function PureArtifact({
   const {
     data: documents,
     isLoading: isDocumentsFetching,
-    mutate: mutateDocuments,
   } = useSWR<Document[]>(
     artifact.documentId !== "init" && artifact.status !== "streaming"
       ? `/api/document?id=${artifact.documentId}`
       : null,
-    fetcher
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    }
   );
 
   const [mode, setMode] = useState<"edit" | "diff">("edit");
@@ -105,25 +109,41 @@ function PureArtifact({
   const [currentVersionIndex, setCurrentVersionIndex] = useState(-1);
 
   const { open: isSidebarOpen } = useSidebar();
+  const initializedDocumentIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (documents && documents.length > 0) {
       const mostRecentDocument = documents.at(-1);
 
       if (mostRecentDocument) {
-        setDocument(mostRecentDocument);
+        setDocument((currentDocument) => {
+          if (
+            currentDocument?.id === mostRecentDocument.id &&
+            currentDocument?.createdAt?.toString() ===
+              mostRecentDocument.createdAt?.toString() &&
+            currentDocument?.content === mostRecentDocument.content
+          ) {
+            return currentDocument;
+          }
+
+          return mostRecentDocument;
+        });
         setCurrentVersionIndex(documents.length - 1);
-        setArtifact((currentArtifact) => ({
-          ...currentArtifact,
-          content: mostRecentDocument.content ?? "",
-        }));
+        setArtifact((currentArtifact) => {
+          const nextContent = mostRecentDocument.content ?? "";
+
+          if (currentArtifact.content === nextContent) {
+            return currentArtifact;
+          }
+
+          return {
+            ...currentArtifact,
+            content: nextContent,
+          };
+        });
       }
     }
   }, [documents, setArtifact]);
-
-  useEffect(() => {
-    mutateDocuments();
-  }, [mutateDocuments]);
 
   const { mutate } = useSWRConfig();
   const [isContentDirty, setIsContentDirty] = useState(false);
@@ -248,18 +268,30 @@ function PureArtifact({
   const artifactDefinition = artifactDefinitions.find(
     (definition) => definition.kind === artifact.kind
   );
+  const currentDocumentContent =
+    artifact.status === "streaming"
+      ? artifact.content
+      : (document?.content ?? artifact.content);
 
   if (!artifactDefinition) {
     throw new Error("Artifact definition not found!");
   }
 
   useEffect(() => {
-    if (artifact.documentId !== "init" && artifactDefinition.initialize) {
-      artifactDefinition.initialize({
-        documentId: artifact.documentId,
-        setMetadata,
-      });
+    if (artifact.documentId === "init" || !artifactDefinition.initialize) {
+      return;
     }
+
+    if (initializedDocumentIdRef.current === artifact.documentId) {
+      return;
+    }
+
+    initializedDocumentIdRef.current = artifact.documentId;
+
+    void artifactDefinition.initialize({
+      documentId: artifact.documentId,
+      setMetadata,
+    });
   }, [artifact.documentId, artifactDefinition, setMetadata]);
 
   return (
@@ -463,7 +495,7 @@ function PureArtifact({
               <artifactDefinition.content
                 content={
                   isCurrentVersion
-                    ? artifact.content
+                    ? currentDocumentContent
                     : getDocumentContentById(currentVersionIndex)
                 }
                 currentVersionIndex={currentVersionIndex}
@@ -521,7 +553,7 @@ export const Artifact = memo(PureArtifact, (prevProps, nextProps) => {
   if (prevProps.input !== nextProps.input) {
     return false;
   }
-  if (!equal(prevProps.messages, nextProps.messages.length)) {
+  if (prevProps.messages.length !== nextProps.messages.length) {
     return false;
   }
   if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType) {
