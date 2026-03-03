@@ -9,12 +9,12 @@ import {
 
 type MessageReasoningProps = {
   isLoading: boolean;
-  reasoning: string;
+  segments: string[];
 };
 
 export function MessageReasoning({
   isLoading,
-  reasoning,
+  segments,
 }: MessageReasoningProps) {
   const [hasBeenStreaming, setHasBeenStreaming] = useState(isLoading);
 
@@ -23,6 +23,8 @@ export function MessageReasoning({
       setHasBeenStreaming(true);
     }
   }, [isLoading]);
+
+  const reasoning = segments.filter(Boolean).join("\n\n---\n\n");
 
   return (
     <Reasoning

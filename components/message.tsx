@@ -27,6 +27,7 @@ import {
 import { RegenerateSparkIcon, SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { MessageEditor } from "./message-editor";
+import { collectMessageReasoning } from "./message-reasoning-group";
 import { MessageReasoning } from "./message-reasoning";
 import { PreviewAttachment } from "./preview-attachment";
 import { Weather } from "./weather";
@@ -64,6 +65,7 @@ const PurePreviewMessage = ({
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
 
   const messageParts = message.parts ?? [];
+  const groupedReasoning = collectMessageReasoning(messageParts);
   const attachmentsFromMessage = messageParts.filter(
     (part) => part.type === "file"
   );
@@ -73,11 +75,7 @@ const PurePreviewMessage = ({
   const hasToolParts = messageParts.some((part) =>
     part.type.startsWith("tool-")
   );
-  const hasReasoningParts = messageParts.some(
-    (part) =>
-      part.type === "reasoning" &&
-      (part.text?.trim() || ("state" in part && part.state === "streaming"))
-  );
+  const hasReasoningParts = groupedReasoning.hasReasoning;
   const hasVisibleContent =
     hasTextParts ||
     hasToolParts ||
@@ -186,22 +184,19 @@ const PurePreviewMessage = ({
             </div>
           )}
 
+          {groupedReasoning.hasReasoning && (
+            <MessageReasoning
+              isLoading={groupedReasoning.isStreaming}
+              segments={groupedReasoning.segments}
+            />
+          )}
+
           {messageParts.map((part, index) => {
             const { type } = part;
             const key = `message-${message.id}-part-${index}`;
 
             if (type === "reasoning") {
-              const hasContent = part.text?.trim().length > 0;
-              const isStreaming = "state" in part && part.state === "streaming";
-              if (hasContent || isStreaming) {
-                return (
-                  <MessageReasoning
-                    isLoading={isStreaming}
-                    key={key}
-                    reasoning={part.text || ""}
-                  />
-                );
-              }
+              return null;
             }
 
             if (type === "text") {

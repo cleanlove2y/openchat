@@ -98,7 +98,8 @@ export const Reasoning = memo(
       >
         <Collapsible
           className={cn(
-            "not-prose flex w-full flex-col overflow-hidden rounded-lg border border-border/50 bg-[#121212] text-sm transition-all",
+            "not-prose flex w-full flex-col overflow-hidden rounded-xl border border-border/50 bg-[#0A0A0A]/50 backdrop-blur-md text-sm transition-all duration-300",
+            isStreaming && "border-blue-500/30 ring-1 ring-blue-500/20",
             className
           )}
           onOpenChange={handleOpenChange}
@@ -106,24 +107,24 @@ export const Reasoning = memo(
           {...props}
         >
           <CollapsibleTrigger asChild>
-            <div className="flex cursor-pointer items-center gap-2 px-3 py-2.5 transition-colors hover:bg-muted/10">
+            <div className="flex cursor-pointer items-center gap-2.5 px-4 py-3 transition-colors hover:bg-muted/20">
               {isStreaming ? (
-                <RegenerateSparkIcon className="size-4 animate-spin text-blue-400" />
+                <RegenerateSparkIcon className="size-4 animate-spin text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]" />
               ) : (
-                <SparklesIcon className="size-4 text-blue-400" />
+                <SparklesIcon className="size-4 text-blue-400/80" />
               )}
               {isStreaming ? (
                 <>
-                  <span className="font-medium text-foreground/90">
+                  <span className="font-medium text-foreground/80">
                     Thinking
                   </span>
                   <ThinkingIndicator
-                    className="text-blue-400"
-                    dotClassName="bg-blue-400"
+                    className="text-blue-400/70"
+                    dotClassName="bg-blue-400/70"
                   />
                 </>
               ) : (
-                <span className="font-medium text-foreground/90">Thoughts</span>
+                <span className="font-medium text-foreground/80">Thoughts</span>
               )}
             </div>
           </CollapsibleTrigger>
@@ -143,7 +144,7 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center justify-between border-t border-border/40 px-3 py-2 text-[13px] text-muted-foreground transition-colors hover:bg-muted/10 hover:text-foreground",
+          "flex w-full items-center justify-between border-t border-border/20 px-4 py-2.5 text-[12px] text-muted-foreground/60 transition-all hover:bg-muted/10 hover:text-foreground/80",
           className
         )}
         {...props}
@@ -186,8 +187,8 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <div className="px-3 pb-3">
-        <Response className="grid w-full gap-4 text-[13px] **:text-[13px] [&_li]:my-1 [&_ol]:my-1 [&_p]:my-1 [&_ul]:my-1">
+      <div className="px-4 pb-4">
+        <Response className="grid w-full gap-4 text-[13px] text-foreground/70 **:text-[13px] [&_li]:my-1 [&_ol]:my-1 [&_p]:my-1 [&_ul]:my-1 [&_hr]:my-6 [&_hr]:border-border/30">
           {children}
         </Response>
       </div>
