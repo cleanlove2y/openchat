@@ -25,10 +25,11 @@ function isAuthJsError(error: unknown): error is AuthError {
     return false;
   }
 
+  const errorWithType = error as Error & { type?: unknown };
+
   return (
     error.name === "AuthError" ||
-    (typeof (error as { type?: unknown }).type === "string" &&
-      (error as { type: string }).type === "AuthError")
+    (typeof errorWithType.type === "string" && errorWithType.type === "AuthError")
   );
 }
 

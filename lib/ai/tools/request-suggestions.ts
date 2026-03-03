@@ -1,6 +1,10 @@
 import { Output, streamText, tool, type UIMessageStreamWriter } from "ai";
 import type { Session } from "next-auth";
 import { z } from "zod";
+import {
+  requestSuggestionsPrompt,
+  requestSuggestionsToolDescription,
+} from "@/lib/ai/prompts";
 import { getDocumentById, saveSuggestions } from "@/lib/db/queries";
 import type { Suggestion } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
@@ -17,8 +21,7 @@ export const requestSuggestions = ({
   dataStream,
 }: RequestSuggestionsProps) =>
   tool({
-    description:
-      "Request writing suggestions for an existing document artifact. Only use this when the user explicitly asks to improve or get suggestions for a document they have already created. Never use for general questions.",
+    description: requestSuggestionsToolDescription,
     inputSchema: z.object({
       documentId: z
         .string()
@@ -42,8 +45,7 @@ export const requestSuggestions = ({
 
       const { partialOutputStream } = streamText({
         model: getArtifactModel(),
-        system:
-          "You are a help writing assistant. Given a piece of writing, please offer suggestions to improve the piece of writing and describe the change. It is very important for the edits to contain full sentences instead of just words. Max 5 suggestions.",
+        system: requestSuggestionsPrompt,
         prompt: document.content,
         output: Output.array({
           element: z.object({

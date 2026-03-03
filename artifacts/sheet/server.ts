@@ -1,6 +1,10 @@
 import { streamObject } from "ai";
 import { z } from "zod";
-import { sheetPrompt, updateDocumentPrompt } from "@/lib/ai/prompts";
+import {
+  buildDocumentUpdateContentPrompt,
+  sheetPrompt,
+  updateDocumentPrompt,
+} from "@/lib/ai/prompts";
 import { getArtifactModel } from "@/lib/ai/providers";
 import { createDocumentHandler } from "@/lib/artifacts/server";
 
@@ -50,8 +54,8 @@ export const sheetDocumentHandler = createDocumentHandler<"sheet">({
 
     const { fullStream } = streamObject({
       model: getArtifactModel(),
-      system: updateDocumentPrompt(document.content, "sheet"),
-      prompt: description,
+      system: updateDocumentPrompt("sheet"),
+      prompt: buildDocumentUpdateContentPrompt(document.content, description),
       schema: z.object({
         csv: z.string(),
       }),
