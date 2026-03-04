@@ -17,6 +17,12 @@ import {
   createAuthedApiRoute,
 } from "@/app/api/_shared/authed-route";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import {
+  buildEndpointToolCapabilityRecord,
+  fetchSystemModelToolCapabilityFromEndpoints,
+  isLegacyTagBasedToolCapabilitySource,
+  shouldRefreshEndpointToolCapability,
+} from "@/lib/ai/model-capabilities/vercel";
 import { isReasoningModelId } from "@/lib/ai/models";
 import {
   buildEffectiveSystemPrompt,
@@ -42,10 +48,12 @@ import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
 import { updateDocument } from "@/lib/ai/tools/update-document";
 import { isProductionEnvironment } from "@/lib/constants";
 import {
+  clearModelCapabilityOverrideKey,
   createStreamId,
   deleteChatById,
   deleteMessagesByChatIdAfterTimestamp,
   getChatById,
+  getModelCapabilityOverride,
   getMessageById,
   getMessageCountByUserId,
   getMessagesByChatId,
@@ -53,6 +61,7 @@ import {
   saveChat,
   saveMessages,
   touchUserLlmConnectionLastUsed,
+  upsertModelCapabilityOverride,
   updateChatTitleById,
   updateMessage,
 } from "@/lib/db/queries";
@@ -66,7 +75,11 @@ import {
   parseConnectionTemperature,
 } from "@/lib/server/user-llm";
 import type { ChatMessage } from "@/lib/types";
-import { decodeUserConnectionModelId } from "@/lib/user-llm";
+import {
+  decodeUserConnectionModelId,
+  ENABLE_MODEL_TOOL_CAPABILITY_GATING,
+  normalizeConnectionProvider,
+} from "@/lib/user-llm";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
 
@@ -168,6 +181,42 @@ function removeEmptyModelMessages(
     // (for example, chat title metadata) that convert into empty model messages.
     return !Array.isArray(content) || content.length > 0;
   });
+}
+
+function hasAttachmentParts(messages: ChatMessage[]) {
+  return messages.some(
+    (message) =>
+      message.role === "user" &&
+      message.parts.some(
+        (part) =>
+          (part as { type?: unknown }).type === "file" &&
+          "url" in part &&
+          typeof (part as { url?: unknown }).url === "string"
+      )
+  );
+}
+
+function getAttachmentUnsupportedErrorSignature(error: unknown): string | null {
+  if (!(error instanceof Error) || !error.message) {
+    return null;
+  }
+
+  const normalizedMessage = error.message.toLowerCase();
+  const attachmentErrorSignatures = [
+    "does not support image",
+    "does not support file",
+    "image input is not supported",
+    "file input is not supported",
+    "unsupported content type",
+    "multimodal input not supported",
+    "input modality not supported",
+  ];
+
+  return attachmentErrorSignatures.find((signature) =>
+    normalizedMessage.includes(signature)
+  )
+    ? error.message
+    : null;
 }
 
 function trimMessagesForRegenerate({
@@ -308,6 +357,139 @@ const postHandler = async ({
   const selectedUserConnectionApiKey = selectedUserConnection
     ? getConnectionApiKey(selectedUserConnection)
     : undefined;
+  const isUserConnectionModel = Boolean(
+    selectedUserConnection && selectedUserConnectionModel
+  );
+  const hasAttachmentInput = hasAttachmentParts(modelUiMessages);
+  const capabilityTarget: {
+    sourceType: "system" | "user_connection";
+    connectionId: string | null;
+    providerKey: string;
+    modelId: string;
+  } = {
+    sourceType: selectedUserConnection ? "user_connection" : ("system" as const),
+    connectionId: selectedUserConnection?.id ?? null,
+    providerKey: selectedUserConnection
+      ? normalizeConnectionProvider({
+          provider: selectedUserConnection.provider,
+          baseUrl: selectedUserConnection.baseUrl,
+        })
+      : selectedChatModel.split("/")[0] || "vercel",
+    modelId: selectedUserConnectionModel?.modelId ?? selectedChatModel,
+  };
+
+  const shouldLookupCapabilityOverride =
+    hasAttachmentInput ||
+    (!isUserConnectionModel && ENABLE_MODEL_TOOL_CAPABILITY_GATING);
+  const knownCapabilityOverride = shouldLookupCapabilityOverride
+    ? await getModelCapabilityOverride(capabilityTarget).catch((error) => {
+        appLogger.warn(
+          {
+            event: "api.chat.capability_lookup_failed",
+            error,
+            selectedChatModel,
+            capabilityTarget,
+          },
+          "Failed to read model capability override; continuing without capability-based tool precheck"
+        );
+        return null;
+      })
+    : null;
+  let effectiveToolCapabilityStatus =
+    knownCapabilityOverride?.capabilitiesJson.tools?.status ?? "unknown";
+
+  if (!isUserConnectionModel && ENABLE_MODEL_TOOL_CAPABILITY_GATING) {
+    const existingToolSource = knownCapabilityOverride?.capabilitiesJson.tools?.source;
+
+    if (isLegacyTagBasedToolCapabilitySource(existingToolSource)) {
+      await clearModelCapabilityOverrideKey({
+        sourceType: "system",
+        modelId: capabilityTarget.modelId,
+        capabilityKey: "tools",
+        expectedSources: ["vercel_gateway", "vercel_gateway_models"],
+      }).catch((error) => {
+        appLogger.warn(
+          {
+            event: "api.chat.legacy_tool_seed_cleanup_failed",
+            error,
+            selectedChatModel,
+            capabilityTarget,
+          },
+          "Failed to clear legacy tag-based tool capability seed"
+        );
+      });
+
+      effectiveToolCapabilityStatus = "unknown";
+    }
+
+    const shouldRefreshToolCapability = shouldRefreshEndpointToolCapability({
+      source: knownCapabilityOverride?.capabilitiesJson.tools?.source,
+      lastDetectedAt: knownCapabilityOverride?.lastDetectedAt ?? null,
+      updatedAt: knownCapabilityOverride?.updatedAt ?? null,
+    });
+
+    if (shouldRefreshToolCapability) {
+      const endpointToolStatus = await fetchSystemModelToolCapabilityFromEndpoints(
+        capabilityTarget.modelId
+      );
+      const endpointCapabilityRecord =
+        buildEndpointToolCapabilityRecord(endpointToolStatus);
+
+      if (endpointCapabilityRecord) {
+        await upsertModelCapabilityOverride({
+          ...capabilityTarget,
+          capabilities: endpointCapabilityRecord,
+        }).catch((error) => {
+          appLogger.warn(
+            {
+              event: "api.chat.tool_capability_refresh_failed",
+              error,
+              selectedChatModel,
+              capabilityTarget,
+            },
+            "Failed to persist endpoint-based tool capability"
+          );
+        });
+
+        effectiveToolCapabilityStatus = endpointToolStatus;
+      } else {
+        await clearModelCapabilityOverrideKey({
+          sourceType: "system",
+          modelId: capabilityTarget.modelId,
+          capabilityKey: "tools",
+          expectedSources: ["vercel_gateway_endpoints"],
+        }).catch((error) => {
+          appLogger.warn(
+            {
+              event: "api.chat.tool_capability_clear_failed",
+              error,
+              selectedChatModel,
+              capabilityTarget,
+            },
+            "Failed to clear stale endpoint-based tool capability"
+          );
+        });
+
+        effectiveToolCapabilityStatus = "unknown";
+      }
+    }
+  }
+
+  const isToolCallingAllowedForCurrentModel =
+    !ENABLE_MODEL_TOOL_CAPABILITY_GATING ||
+    isUserConnectionModel ||
+    effectiveToolCapabilityStatus !== "unsupported";
+  const isStandardToolingAllowedForCurrentModel =
+    isToolCallingAllowedForCurrentModel;
+  const isSkillToolingAllowedForCurrentModel =
+    isToolCallingAllowedForCurrentModel;
+
+  if (
+    hasAttachmentInput &&
+    knownCapabilityOverride?.capabilitiesJson.attachments?.status === "unsupported"
+  ) {
+    return new OpenChatError("bad_request:attachment").toResponse();
+  }
 
   if (message?.role === "user") {
     const messageAlreadyExists = messagesFromDb.some(
@@ -335,9 +517,6 @@ const postHandler = async ({
     }
   }
 
-  const isUserConnectionModel = Boolean(
-    selectedUserConnection && selectedUserConnectionModel
-  );
   const isReasoningModel = isUserConnectionModel
     ? false
     : isReasoningModelId(selectedChatModel);
@@ -375,11 +554,9 @@ const postHandler = async ({
       };
     }
   );
-  const skillToolingEnabled = shouldEnableSkillTooling(
-    skillsConfig.enabled,
-    skillsSnapshot.skills.length,
-    isReasoningModel
-  );
+  const skillToolingEnabled =
+    isSkillToolingAllowedForCurrentModel &&
+    shouldEnableSkillTooling(skillsConfig.enabled, skillsSnapshot.skills.length);
   const explicitlyLoadedSkills: Array<{ name: string; content: string }> = [];
   const missingExplicitSkillNames: string[] = [];
 
@@ -424,7 +601,10 @@ const postHandler = async ({
   const explicitSkillsSystemPrompt = buildExplicitSkillsContextPrompt(
     explicitlyLoadedSkills
   );
-  const baseSystemPrompt = systemPrompt({ selectedChatModel, requestHints });
+  const baseSystemPrompt = systemPrompt({
+    requestHints,
+    includeArtifactsPrompt: isStandardToolingAllowedForCurrentModel,
+  });
   const effectiveSystemPrompt = buildEffectiveSystemPrompt([
     baseSystemPrompt,
     skillsSystemPrompt,
@@ -490,60 +670,147 @@ const postHandler = async ({
     | "load_skill"
   > = [];
 
-  if (!isReasoningModel) {
+  if (isStandardToolingAllowedForCurrentModel) {
     activeTools.push(
       "getWeather",
       "createDocument",
       "updateDocument",
       "requestSuggestions"
     );
-
-    if (loadSkillTool) {
-      activeTools.push("loadSkill");
-    }
-
-    if (loadSkillAliasTool) {
-      activeTools.push("load_skill");
-    }
   }
+
+  if (loadSkillTool) {
+    activeTools.push("loadSkill");
+  }
+
+  if (loadSkillAliasTool) {
+    activeTools.push("load_skill");
+  }
+
+  let streamWriter:
+    | {
+        write: (part: {
+          type: "data-model-capabilities-refresh";
+          data: {
+            capability: "attachments";
+            modelId: string;
+            status: "unsupported";
+          };
+        }) => void;
+      }
+    | null = null;
+  let didQueueCapabilityRefresh = false;
+
+  const markAttachmentsUnsupported = async ({
+    error,
+    persistOnly = false,
+  }: {
+    error: unknown;
+    persistOnly?: boolean;
+  }) => {
+    if (!hasAttachmentInput) {
+      return false;
+    }
+
+    const errorSignature = getAttachmentUnsupportedErrorSignature(error);
+
+    if (!errorSignature) {
+      return false;
+    }
+
+    await upsertModelCapabilityOverride({
+      ...capabilityTarget,
+      capabilities: {
+        attachments: {
+          status: "unsupported",
+          confidence: "high",
+          source: "runtime_error_fallback",
+        },
+      },
+      lastErrorSignature: errorSignature,
+    }).catch((persistError) => {
+      appLogger.warn(
+        {
+          event: "api.chat.capability_persist_failed",
+          persistError,
+          selectedChatModel,
+          capabilityTarget,
+        },
+        "Failed to persist attachment capability override; continuing without capability cache update"
+      );
+    });
+
+    if (!persistOnly && streamWriter && !didQueueCapabilityRefresh) {
+      streamWriter.write({
+        type: "data-model-capabilities-refresh",
+        data: {
+          modelId: selectedChatModel,
+          capability: "attachments",
+          status: "unsupported",
+        },
+      });
+      didQueueCapabilityRefresh = true;
+    }
+
+    return true;
+  };
 
   const stream = createUIMessageStream({
     originalMessages: isMessagesFlow ? uiMessages : undefined,
     execute: async ({ writer: dataStream }) => {
-      const result = streamText({
-        model: activeLanguageModel,
-        system: effectiveSystemPrompt,
-        messages: modelMessages,
-        temperature: requestTemperature,
-        stopWhen: stepCountIs(5),
-        experimental_activeTools: activeTools,
-        providerOptions: isReasoningModel
-          ? {
-              anthropic: {
-                thinking: { type: "enabled", budgetTokens: 10_000 },
-              },
-            }
-          : undefined,
-        tools: {
-          getWeather,
-          createDocument: createDocument({ session, dataStream }),
-          updateDocument: updateDocument({ session, dataStream }),
-          requestSuggestions: requestSuggestions({ session, dataStream }),
+      streamWriter = dataStream;
+
+      try {
+        const configuredTools = {
+          ...(isStandardToolingAllowedForCurrentModel
+            ? {
+                getWeather,
+                createDocument: createDocument({ session, dataStream }),
+                updateDocument: updateDocument({ session, dataStream }),
+                requestSuggestions: requestSuggestions({ session, dataStream }),
+              }
+            : {}),
           ...(loadSkillTool ? { loadSkill: loadSkillTool } : {}),
           ...(loadSkillAliasTool ? { load_skill: loadSkillAliasTool } : {}),
-        },
-        experimental_telemetry: {
-          isEnabled: isProductionEnvironment,
-          functionId: "stream-text",
-        },
-      });
+        };
+        const result = streamText({
+          model: activeLanguageModel,
+          system: effectiveSystemPrompt,
+          messages: modelMessages,
+          temperature: requestTemperature,
+          stopWhen: stepCountIs(5),
+          providerOptions: isReasoningModel
+            ? {
+                anthropic: {
+                  thinking: { type: "enabled", budgetTokens: 10_000 },
+                },
+              }
+            : undefined,
+          ...(activeTools.length > 0
+            ? {
+                experimental_activeTools: activeTools,
+                tools: configuredTools,
+              }
+            : {}),
+          experimental_telemetry: {
+            isEnabled: isProductionEnvironment,
+            functionId: "stream-text",
+          },
+        });
 
-      dataStream.merge(result.toUIMessageStream({ sendReasoning: true }));
+        dataStream.merge(result.toUIMessageStream({ sendReasoning: true }));
 
-      if (titlePromise) {
-        const title = await titlePromise;
-        dataStream.write({ type: "data-chat-title", data: title });
-        updateChatTitleById({ chatId: id, title });
+        if (titlePromise) {
+          const title = await titlePromise;
+          dataStream.write({ type: "data-chat-title", data: title });
+          updateChatTitleById({ chatId: id, title });
+        }
+      } catch (error) {
+        if (await markAttachmentsUnsupported({ error })) {
+          throw new OpenChatError("bad_request:attachment");
+        }
+
+        throw error;
       }
     },
     generateId: generateUUID,
@@ -602,7 +869,29 @@ const postHandler = async ({
         });
       }
     },
-    onError: () => "Oops, an error occurred!",
+    onError: (error) => {
+      const errorSignature = getAttachmentUnsupportedErrorSignature(error);
+
+      if (errorSignature && hasAttachmentInput) {
+        void markAttachmentsUnsupported({ error, persistOnly: false }).catch(
+          (persistError) => {
+            appLogger.error(
+              {
+                event: "api.chat.attachment_capability_persist_failed",
+                persistError,
+                selectedChatModel,
+                capabilityTarget,
+              },
+              "Failed to persist attachment capability override"
+            );
+          }
+        );
+
+        return new OpenChatError("bad_request:attachment").message;
+      }
+
+      return "Oops, an error occurred!";
+    },
   });
 
   return createUIMessageStreamResponse({

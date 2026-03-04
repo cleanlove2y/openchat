@@ -277,11 +277,10 @@ test("loadSkillByName returns body only (progressive disclosure)", async () => {
   }
 });
 
-test("shouldEnableSkillTooling respects enabled flag, skill count, and reasoning mode", () => {
-  assert.equal(shouldEnableSkillTooling(true, 1, true), false);
-  assert.equal(shouldEnableSkillTooling(true, 1, false), true);
-  assert.equal(shouldEnableSkillTooling(true, 0, false), false);
-  assert.equal(shouldEnableSkillTooling(false, 1, false), false);
+test("shouldEnableSkillTooling respects enabled flag and skill count", () => {
+  assert.equal(shouldEnableSkillTooling(true, 1), true);
+  assert.equal(shouldEnableSkillTooling(true, 0), false);
+  assert.equal(shouldEnableSkillTooling(false, 1), false);
 });
 
 test("buildSkillsSystemPrompt enforces canonical loadSkill tool naming", () => {

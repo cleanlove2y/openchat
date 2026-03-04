@@ -5,23 +5,8 @@ import * as prompts from "@/lib/ai/prompts";
 
 const promptRegistry = prompts as Record<string, unknown>;
 
-test("systemPrompt omits artifact rules for reasoning models", () => {
+test("systemPrompt includes artifact rules for reasoning models", () => {
   const result = prompts.systemPrompt({
-    selectedChatModel: "deepseek/deepseek-r1",
-    requestHints: {
-      latitude: "1",
-      longitude: "2",
-      city: "Shanghai",
-      country: "CN",
-    },
-  });
-
-  assert.equal(result.includes("Use the artifacts tools"), false);
-});
-
-test("systemPrompt includes artifact rules for non-reasoning models", () => {
-  const result = prompts.systemPrompt({
-    selectedChatModel: "openai/gpt-4.1-mini",
     requestHints: {
       latitude: "1",
       longitude: "2",
@@ -31,6 +16,33 @@ test("systemPrompt includes artifact rules for non-reasoning models", () => {
   });
 
   assert.equal(result.includes("Use the artifacts tools"), true);
+});
+
+test("systemPrompt includes artifact rules for non-reasoning models", () => {
+  const result = prompts.systemPrompt({
+    requestHints: {
+      latitude: "1",
+      longitude: "2",
+      city: "Shanghai",
+      country: "CN",
+    },
+  });
+
+  assert.equal(result.includes("Use the artifacts tools"), true);
+});
+
+test("systemPrompt can omit artifact rules when tooling is disabled", () => {
+  const result = prompts.systemPrompt({
+    requestHints: {
+      latitude: "1",
+      longitude: "2",
+      city: "Shanghai",
+      country: "CN",
+    },
+    includeArtifactsPrompt: false,
+  });
+
+  assert.equal(result.includes("Use the artifacts tools"), false);
 });
 
 test("getRequestPromptFromHints scopes location data to relevant requests", () => {

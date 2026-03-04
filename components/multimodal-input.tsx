@@ -4,12 +4,14 @@ import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
 import {
+  AlertCircleIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   WrenchIcon,
   XIcon,
 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -44,12 +46,12 @@ import {
 import {
   chatModels,
   DEFAULT_CHAT_MODEL,
-  isReasoningModelId,
 } from "@/lib/ai/models";
 import { useAppTranslation } from "@/lib/i18n/hooks";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import {
   decodeUserConnectionModelId,
+  ENABLE_MODEL_TOOL_CAPABILITY_GATING,
   getModelLogoProvider,
   getProviderDisplayName,
   type UserFacingChatModel,
@@ -177,9 +179,38 @@ function PureMultimodalInput({
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
 }) {
+  const [isToolingHintDismissed, setIsToolingHintDismissed] = useState(false);
+  const [isAttachmentHintDismissed, setIsAttachmentHintDismissed] =
+    useState(false);
+  const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const { t } = useAppTranslation("chat");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
+  const fallbackModels = useMemo<UserFacingChatModel[]>(
+    () =>
+      chatModels.map((model) => ({
+        ...model,
+        source: "system" as const,
+      })),
+    []
+  );
+  const { data: modelsResponse } = useSWR<{
+    object: "list";
+    data: UserFacingChatModel[];
+  }>("/api/models", fetcher);
+  const availableModels = modelsResponse?.data ?? fallbackModels;
+  const selectedModel =
+    availableModels.find((model) => model.id === selectedModelId) ??
+    fallbackModels.find((model) => model.id === selectedModelId) ??
+    createPendingModelEntry(selectedModelId);
+  const hasResolvedModelCapabilities = Boolean(modelsResponse?.data);
+  const isAttachmentUnsupportedForSelectedModel =
+    selectedModel.capabilities?.attachments === "unsupported";
+  const isToolingUnsupportedForSelectedModel =
+    ENABLE_MODEL_TOOL_CAPABILITY_GATING &&
+    hasResolvedModelCapabilities &&
+    selectedModel.source === "system" &&
+    selectedModel.capabilities?.tools === "unsupported";
 
   const adjustHeight = useCallback(() => {
     if (textareaRef.current) {
@@ -192,6 +223,11 @@ function PureMultimodalInput({
       adjustHeight();
     }
   }, [adjustHeight]);
+
+  useEffect(() => {
+    setIsToolingHintDismissed(false);
+    setIsAttachmentHintDismissed(false);
+  }, [selectedModelId]);
 
   const hasAutoFocused = useRef(false);
   useEffect(() => {
@@ -263,8 +299,16 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+  const showAttachmentUnsupportedToast = useCallback(() => {
+    toast.error(t("upload.unsupportedModelHint"));
+  }, [t]);
 
   const submitForm = useCallback(() => {
+    if (attachments.length > 0 && isAttachmentUnsupportedForSelectedModel) {
+      showAttachmentUnsupportedToast();
+      return;
+    }
+
     const commandPrefix =
       selectedSlashCommands.length > 0
         ? `${selectedSlashCommands.map((c) => `[Use Skill: ${c.id}]`).join("\n")}\n\n`
@@ -299,6 +343,7 @@ function PureMultimodalInput({
     input,
     setInput,
     attachments,
+    isAttachmentUnsupportedForSelectedModel,
     sendMessage,
     setAttachments,
     setLocalStorageInput,
@@ -306,6 +351,7 @@ function PureMultimodalInput({
     chatId,
     resetHeight,
     selectedSlashCommands,
+    showAttachmentUnsupportedToast,
   ]);
 
   const uploadFile = useCallback(
@@ -340,6 +386,12 @@ function PureMultimodalInput({
 
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
+      if (isAttachmentUnsupportedForSelectedModel) {
+        event.target.value = "";
+        showAttachmentUnsupportedToast();
+        return;
+      }
+
       const files = Array.from(event.target.files || []);
 
       setUploadQueue(files.map((file) => file.name));
@@ -361,13 +413,27 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments, uploadFile]
+    [isAttachmentUnsupportedForSelectedModel, setAttachments, showAttachmentUnsupportedToast, uploadFile]
   );
 
   const handlePaste = useCallback(
     async (event: ClipboardEvent) => {
       const items = event.clipboardData?.items;
       if (!items) {
+        return;
+      }
+
+      const hasFileOrImageItems = Array.from(items).some(
+        (item) => item.kind === "file" || item.type.startsWith("image/")
+      );
+
+      if (!hasFileOrImageItems) {
+        return;
+      }
+
+      if (isAttachmentUnsupportedForSelectedModel) {
+        event.preventDefault();
+        showAttachmentUnsupportedToast();
         return;
       }
 
@@ -409,7 +475,7 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments, uploadFile, t]
+    [isAttachmentUnsupportedForSelectedModel, setAttachments, showAttachmentUnsupportedToast, uploadFile, t]
   );
 
   // Add paste event listener to textarea
@@ -453,6 +519,10 @@ function PureMultimodalInput({
             attachments.length === 0 &&
             selectedSlashCommands.length === 0
           ) {
+            return;
+          }
+          if (attachments.length > 0 && isAttachmentUnsupportedForSelectedModel) {
+            showAttachmentUnsupportedToast();
             return;
           }
           if (status !== "ready") {
@@ -549,16 +619,95 @@ function PureMultimodalInput({
             value={input}
           />
         </div>
+        <AnimatePresence>
+          {isAttachmentUnsupportedForSelectedModel &&
+            !isAttachmentHintDismissed && (
+              <motion.div
+                initial={{ height: 0, opacity: 0, y: 5 }}
+                animate={{ height: "auto", opacity: 1, y: 0 }}
+                exit={{ height: 0, opacity: 0, y: 5 }}
+                transition={{ type: "spring", damping: 20, stiffness: 300 }}
+                className="overflow-hidden"
+              >
+                <div className="mx-2 mb-2 flex items-center justify-between gap-3 rounded-xl border border-blue-500/15 bg-linear-to-r from-blue-500/10 to-transparent px-3 py-2 text-xs backdrop-blur-md dark:border-blue-400/20 dark:from-blue-400/15 dark:to-transparent">
+                  <div className="flex items-center gap-2.5 text-blue-600 dark:text-blue-400">
+                    <AlertCircleIcon className="size-3.5 fill-blue-500/10" />
+                    <span className="font-medium leading-relaxed">
+                      {t("upload.unsupportedModelHint")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsModelSelectorOpen(true)}
+                      className="rounded-md px-2 py-1 font-semibold text-blue-600 transition-colors hover:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-400/20"
+                    >
+                      切换
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAttachmentHintDismissed(true)}
+                      className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Dismiss hint"
+                    >
+                      <XIcon className="size-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isToolingUnsupportedForSelectedModel && !isToolingHintDismissed && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, y: 5 }}
+              animate={{ height: "auto", opacity: 1, y: 0 }}
+              exit={{ height: 0, opacity: 0, y: 5 }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              className="overflow-hidden"
+            >
+              <div className="mx-2 mb-2 flex items-center justify-between gap-3 rounded-xl border border-blue-500/15 bg-linear-to-r from-blue-500/10 to-transparent px-3 py-2 text-xs backdrop-blur-md dark:border-blue-400/20 dark:from-blue-400/15 dark:to-transparent">
+                <div className="flex items-center gap-2.5 text-blue-600 dark:text-blue-400">
+                  <WrenchIcon className="size-3.5 fill-blue-500/10" />
+                  <span className="font-medium leading-relaxed">
+                    {t("tools.unsupportedModelHint")}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsModelSelectorOpen(true)}
+                    className="rounded-md px-2 py-1 font-semibold text-blue-600 transition-colors hover:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-400/20"
+                  >
+                    切换
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsToolingHintDismissed(true)}
+                    className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Dismiss hint"
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <PromptInputToolbar className="border-top-0! border-t-0! p-0 shadow-none dark:border-0 dark:border-transparent!">
           <PromptInputTools className="gap-0 sm:gap-0.5">
             <AttachmentsButton
               fileInputRef={fileInputRef}
-              selectedModelId={selectedModelId}
+              isDisabledByModel={isAttachmentUnsupportedForSelectedModel}
               status={status}
             />
             <ModelSelectorCompact
               onModelChange={onModelChange}
               selectedModelId={selectedModelId}
+              open={isModelSelectorOpen}
+              onOpenChange={setIsModelSelectorOpen}
             />
           </PromptInputTools>
 
@@ -608,20 +757,18 @@ export const MultimodalInput = memo(
 
 function PureAttachmentsButton({
   fileInputRef,
+  isDisabledByModel,
   status,
-  selectedModelId,
 }: {
   fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
+  isDisabledByModel: boolean;
   status: UseChatHelpers<ChatMessage>["status"];
-  selectedModelId: string;
 }) {
-  const isReasoningModel = isReasoningModelId(selectedModelId);
-
   return (
     <Button
       className="aspect-square h-8 rounded-lg p-1 transition-colors hover:bg-accent"
       data-testid="attachments-button"
-      disabled={status !== "ready" || isReasoningModel}
+      disabled={status !== "ready" || isDisabledByModel}
       onClick={(event) => {
         event.preventDefault();
         fileInputRef.current?.click();
@@ -638,12 +785,15 @@ const AttachmentsButton = memo(PureAttachmentsButton);
 function PureModelSelectorCompact({
   selectedModelId,
   onModelChange,
+  open,
+  onOpenChange,
 }: {
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useAppTranslation("chat");
-  const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [expandedSourceGroups, setExpandedSourceGroups] = useState<
     Record<"user" | "system", boolean>
@@ -934,7 +1084,7 @@ function PureModelSelectorCompact({
   );
 
   return (
-    <ModelSelector onOpenChange={setOpen} open={open}>
+    <ModelSelector onOpenChange={onOpenChange} open={open}>
       <ModelSelectorTrigger asChild>
         <Button className="h-8 w-[200px] justify-between px-2" variant="ghost">
           {provider && <ModelSelectorLogo provider={provider} />}
@@ -1036,7 +1186,7 @@ function PureModelSelectorCompact({
                                       onSelect={() => {
                                         onModelChange?.(model.id);
                                         setCookie("chat-model", model.id);
-                                        setOpen(false);
+                                        onOpenChange(false);
                                       }}
                                       value={`${model.name} ${model.provider} ${model.source}`}
                                     >

@@ -171,6 +171,12 @@ export function Chat({
           error.message?.includes("AI Gateway requires a valid credit card")
         ) {
           setShowCreditCardAlert(true);
+        } else if (error.surface === "attachment") {
+          mutate("/api/models");
+          toast({
+            type: "error",
+            description: error.message,
+          });
         } else {
           toast({
             type: "error",

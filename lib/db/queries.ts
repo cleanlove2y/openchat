@@ -25,6 +25,9 @@ import {
   type DBMessage,
   document,
   message,
+  type ModelCapabilityOverride,
+  modelCapabilityOverride,
+  type NewModelCapabilityOverride,
   type NewUserLlmConnection,
   type NewUserLlmModelCache,
   type Suggestion,
@@ -39,6 +42,11 @@ import {
   vote,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
+import type {
+  ModelCapabilityKey,
+  ModelCapabilityRecord,
+  ModelCapabilitySource,
+} from "../user-llm";
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -48,6 +56,100 @@ import { generateHashedPassword } from "./utils";
 const client = postgres(process.env.POSTGRES_URL!);
 const db = drizzle(client);
 const appLogger = getAppLogger();
+
+type ModelCapabilityRef = {
+  sourceType: "system" | "user_connection";
+  connectionId?: string | null;
+  modelId: string;
+};
+
+const modelCapabilitySourcePriority: Record<ModelCapabilitySource, number> = {
+  vercel_gateway_models: 1,
+  openrouter: 2,
+  vercel_gateway_endpoints: 2,
+  runtime_success_probe: 3,
+  runtime_error_fallback: 4,
+  manual: 5,
+};
+
+function mergeModelCapabilities({
+  existing,
+  incoming,
+}: {
+  existing: ModelCapabilityRecord;
+  incoming: ModelCapabilityRecord;
+}): ModelCapabilityRecord {
+  const merged: ModelCapabilityRecord = { ...existing };
+
+  for (const capabilityKey of Object.keys(incoming) as ModelCapabilityKey[]) {
+    const incomingState = incoming[capabilityKey];
+
+    if (!incomingState) {
+      continue;
+    }
+
+    const existingState = merged[capabilityKey];
+
+    if (!existingState) {
+      merged[capabilityKey] = incomingState;
+      continue;
+    }
+
+    const existingPriority =
+      modelCapabilitySourcePriority[
+        existingState.source as ModelCapabilitySource
+      ] ?? 0;
+    const incomingPriority =
+      modelCapabilitySourcePriority[
+        incomingState.source as ModelCapabilitySource
+      ] ?? 0;
+
+    if (incomingPriority >= existingPriority) {
+      merged[capabilityKey] = incomingState;
+    }
+  }
+
+  return merged;
+}
+
+function hasCapabilityData(
+  capabilities: ModelCapabilityRecord | null | undefined
+): capabilities is ModelCapabilityRecord {
+  return Boolean(capabilities && Object.keys(capabilities).length > 0);
+}
+
+function modelCapabilityRecordsEqual(
+  left: ModelCapabilityRecord,
+  right: ModelCapabilityRecord
+) {
+  const keys = new Set([
+    ...Object.keys(left),
+    ...Object.keys(right),
+  ]) as Set<ModelCapabilityKey>;
+
+  for (const capabilityKey of keys) {
+    const leftState = left[capabilityKey];
+    const rightState = right[capabilityKey];
+
+    if (!leftState && !rightState) {
+      continue;
+    }
+
+    if (!leftState || !rightState) {
+      return false;
+    }
+
+    if (
+      leftState.status !== rightState.status ||
+      leftState.confidence !== rightState.confidence ||
+      leftState.source !== rightState.source
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 export async function getUser(email: string): Promise<User[]> {
   try {
@@ -846,6 +948,359 @@ export async function getUserLlmModelCache({
     throw new OpenChatError(
       "bad_request:database",
       "Failed to get user LLM model cache"
+    );
+  }
+}
+
+export async function getModelCapabilityOverride({
+  sourceType,
+  connectionId,
+  modelId,
+}: ModelCapabilityRef): Promise<ModelCapabilityOverride | null> {
+  if (sourceType === "user_connection" && !connectionId) {
+    return null;
+  }
+
+  const safeConnectionId = connectionId ?? null;
+
+  try {
+    const query = db.select().from(modelCapabilityOverride).where(
+      sourceType === "system"
+        ? and(
+            eq(modelCapabilityOverride.sourceType, "system"),
+            eq(modelCapabilityOverride.modelId, modelId)
+          )
+        : and(
+            eq(modelCapabilityOverride.sourceType, "user_connection"),
+            eq(modelCapabilityOverride.connectionId, safeConnectionId as string),
+            eq(modelCapabilityOverride.modelId, modelId)
+          )
+    );
+
+    const [capability] = await query.limit(1);
+    return capability ?? null;
+  } catch (_error) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to get model capability override"
+    );
+  }
+}
+
+export async function listModelCapabilityOverrides({
+  refs,
+}: {
+  refs: ModelCapabilityRef[];
+}): Promise<ModelCapabilityOverride[]> {
+  if (refs.length === 0) {
+    return [];
+  }
+
+  try {
+    const systemModelIds = Array.from(
+      new Set(
+        refs
+          .filter((ref) => ref.sourceType === "system")
+          .map((ref) => ref.modelId)
+          .filter(Boolean)
+      )
+    );
+    const userConnectionIds = Array.from(
+      new Set(
+        refs
+          .filter(
+            (ref): ref is ModelCapabilityRef & { connectionId: string } =>
+              ref.sourceType === "user_connection" && Boolean(ref.connectionId)
+          )
+          .map((ref) => ref.connectionId)
+      )
+    );
+
+    const rows: ModelCapabilityOverride[] = [];
+
+    if (systemModelIds.length > 0) {
+      const systemRows = await db
+        .select()
+        .from(modelCapabilityOverride)
+        .where(
+          and(
+            eq(modelCapabilityOverride.sourceType, "system"),
+            inArray(modelCapabilityOverride.modelId, systemModelIds)
+          )
+        );
+
+      rows.push(...systemRows);
+    }
+
+    if (userConnectionIds.length > 0) {
+      const requestedUserKeys = new Set(
+        refs
+          .filter(
+            (ref): ref is ModelCapabilityRef & { connectionId: string } =>
+              ref.sourceType === "user_connection" && Boolean(ref.connectionId)
+          )
+          .map((ref) => `${ref.connectionId}:${ref.modelId}`)
+      );
+
+      const userRows = await db
+        .select()
+        .from(modelCapabilityOverride)
+        .where(
+          and(
+            eq(modelCapabilityOverride.sourceType, "user_connection"),
+            inArray(modelCapabilityOverride.connectionId, userConnectionIds)
+          )
+        );
+
+      rows.push(
+        ...userRows.filter((row) =>
+          requestedUserKeys.has(`${row.connectionId}:${row.modelId}`)
+        )
+      );
+    }
+
+    return rows;
+  } catch (_error) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to list model capability overrides"
+    );
+  }
+}
+
+export async function upsertModelCapabilityOverride({
+  sourceType,
+  connectionId,
+  providerKey,
+  modelId,
+  capabilities,
+  lastErrorSignature,
+}: ModelCapabilityRef & {
+  providerKey: string;
+  capabilities: ModelCapabilityRecord;
+  lastErrorSignature?: string | null;
+}): Promise<ModelCapabilityOverride> {
+  if (!hasCapabilityData(capabilities)) {
+    throw new OpenChatError(
+      "bad_request:database",
+      "Cannot save an empty model capability override"
+    );
+  }
+
+  const now = new Date();
+
+  try {
+    const existing = await getModelCapabilityOverride({
+      sourceType,
+      connectionId,
+      modelId,
+    });
+    const mergedCapabilities = mergeModelCapabilities({
+      existing: existing?.capabilitiesJson ?? {},
+      incoming: capabilities,
+    });
+
+    if (existing) {
+      const shouldKeepExistingRow =
+        providerKey === existing.providerKey &&
+        lastErrorSignature === undefined &&
+        modelCapabilityRecordsEqual(mergedCapabilities, existing.capabilitiesJson);
+
+      if (shouldKeepExistingRow) {
+        return existing;
+      }
+
+      const [updated] = await db
+        .update(modelCapabilityOverride)
+        .set({
+          providerKey,
+          capabilitiesJson: mergedCapabilities,
+          lastDetectedAt: now,
+          lastErrorSignature:
+            lastErrorSignature === undefined
+              ? existing.lastErrorSignature
+              : lastErrorSignature,
+          updatedAt: now,
+        })
+        .where(eq(modelCapabilityOverride.id, existing.id))
+        .returning();
+
+      if (!updated) {
+        throw new OpenChatError(
+          "bad_request:database",
+          "No model capability returned after update"
+        );
+      }
+
+      return updated;
+    }
+
+    const [created] = await db
+      .insert(modelCapabilityOverride)
+      .values({
+        sourceType,
+        connectionId: sourceType === "system" ? null : connectionId ?? null,
+        providerKey,
+        modelId,
+        capabilitiesJson: mergedCapabilities,
+        lastDetectedAt: now,
+        lastErrorSignature: lastErrorSignature ?? null,
+        createdAt: now,
+        updatedAt: now,
+      } satisfies NewModelCapabilityOverride)
+      .returning();
+
+    if (!created) {
+      throw new OpenChatError(
+        "bad_request:database",
+        "No model capability returned after insert"
+      );
+    }
+
+    return created;
+  } catch (error) {
+    if (error instanceof OpenChatError) {
+      throw error;
+    }
+
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to save model capability override"
+    );
+  }
+}
+
+export async function clearModelCapabilityOverrideKey({
+  sourceType,
+  connectionId,
+  modelId,
+  capabilityKey,
+  expectedSources,
+}: ModelCapabilityRef & {
+  capabilityKey: ModelCapabilityKey;
+  expectedSources?: string[];
+}): Promise<void> {
+  try {
+    const existing = await getModelCapabilityOverride({
+      sourceType,
+      connectionId,
+      modelId,
+    });
+
+    if (!existing) {
+      return;
+    }
+
+    const existingState = existing.capabilitiesJson[capabilityKey];
+
+    if (!existingState) {
+      return;
+    }
+
+    if (
+      expectedSources &&
+      !expectedSources.includes(existingState.source as string)
+    ) {
+      return;
+    }
+
+    const nextCapabilities: ModelCapabilityRecord = {
+      ...existing.capabilitiesJson,
+    };
+    delete nextCapabilities[capabilityKey];
+
+    if (!hasCapabilityData(nextCapabilities)) {
+      await db
+        .delete(modelCapabilityOverride)
+        .where(eq(modelCapabilityOverride.id, existing.id));
+      return;
+    }
+
+    await db
+      .update(modelCapabilityOverride)
+      .set({
+        capabilitiesJson: nextCapabilities,
+        updatedAt: new Date(),
+      })
+      .where(eq(modelCapabilityOverride.id, existing.id));
+  } catch (error) {
+    if (error instanceof OpenChatError) {
+      throw error;
+    }
+
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to clear model capability override key"
+    );
+  }
+}
+
+export async function clearLegacySystemToolCapabilitySeeds({
+  modelIds,
+}: {
+  modelIds: string[];
+}): Promise<void> {
+  if (modelIds.length === 0) {
+    return;
+  }
+
+  try {
+    const rows = await db
+      .select()
+      .from(modelCapabilityOverride)
+      .where(
+        and(
+          eq(modelCapabilityOverride.sourceType, "system"),
+          inArray(modelCapabilityOverride.modelId, modelIds)
+        )
+      );
+
+    const legacyRows = rows.filter((row) => {
+      const toolsState = row.capabilitiesJson.tools;
+
+      return (
+        Boolean(toolsState) &&
+        ["vercel_gateway", "vercel_gateway_models"].includes(
+          toolsState?.source as string
+        )
+      );
+    });
+
+    if (legacyRows.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      legacyRows.map(async (row) => {
+        const nextCapabilities: ModelCapabilityRecord = {
+          ...row.capabilitiesJson,
+        };
+        delete nextCapabilities.tools;
+
+        if (!hasCapabilityData(nextCapabilities)) {
+          await db
+            .delete(modelCapabilityOverride)
+            .where(eq(modelCapabilityOverride.id, row.id));
+          return;
+        }
+
+        await db
+          .update(modelCapabilityOverride)
+          .set({
+            capabilitiesJson: nextCapabilities,
+            updatedAt: new Date(),
+          })
+          .where(eq(modelCapabilityOverride.id, row.id));
+      })
+    );
+  } catch (error) {
+    if (error instanceof OpenChatError) {
+      throw error;
+    }
+
+    throw new OpenChatError(
+      "bad_request:database",
+      "Failed to clear legacy system tool capability seeds"
     );
   }
 }

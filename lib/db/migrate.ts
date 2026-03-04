@@ -7,16 +7,20 @@ import { getAppLogger } from "../logging";
 config({
   path: ".env.local",
 });
+config({
+  path: ".env",
+});
 
 const runMigrate = async () => {
   if (!process.env.POSTGRES_URL) {
+    console.error("POSTGRES_URL not defined, skipping migrations");
     getAppLogger().info(
       {
         event: "db.migrate.skipped",
       },
       "POSTGRES_URL not defined, skipping migrations"
     );
-    process.exit(0);
+    return;
   }
 
   const connection = postgres(process.env.POSTGRES_URL, { max: 1 });
@@ -32,6 +36,7 @@ const runMigrate = async () => {
   const start = Date.now();
   await migrate(db, { migrationsFolder: "./lib/db/migrations" });
   const end = Date.now();
+  await connection.end({ timeout: 5 });
 
   getAppLogger().info(
     {
@@ -40,10 +45,10 @@ const runMigrate = async () => {
     },
     "Migrations completed"
   );
-  process.exit(0);
 };
 
 runMigrate().catch((err) => {
+  console.error(err);
   getAppLogger().error(
     {
       event: "db.migrate.failed",
@@ -51,5 +56,5 @@ runMigrate().catch((err) => {
     },
     "Migration failed"
   );
-  process.exit(1);
+  process.exitCode = 1;
 });

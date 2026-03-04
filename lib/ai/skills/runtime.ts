@@ -7,10 +7,9 @@ import { buildSkillsSystemPromptText } from "../prompts/skills";
 
 export function shouldEnableSkillTooling(
   enabled: boolean,
-  discoveredSkillCount: number,
-  isReasoningModel: boolean
+  discoveredSkillCount: number
 ): boolean {
-  return enabled && discoveredSkillCount > 0 && !isReasoningModel;
+  return enabled && discoveredSkillCount > 0;
 }
 
 export function buildSkillsSystemPrompt(skills: SkillMetadata[]): string {

@@ -42,6 +42,11 @@ export type CustomUIDataTypes = {
   clear: null;
   finish: null;
   "chat-title": string;
+  "model-capabilities-refresh": {
+    capability: "attachments";
+    modelId: string;
+    status: "unsupported";
+  };
 };
 
 export type ChatMessage = UIMessage<

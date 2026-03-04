@@ -1,6 +1,7 @@
 import type { ChatModel } from "@/lib/ai/models";
 
 export const USER_CONNECTION_MODEL_PREFIX = "conn_";
+export const ENABLE_MODEL_TOOL_CAPABILITY_GATING = true;
 
 export type ProviderTemplateId =
   | "openai"
@@ -12,10 +13,37 @@ export type ProviderTemplateId =
 
 export type StoredConnectionProvider = ProviderTemplateId | "openai_compatible";
 
+export type ModelCapabilityKey = "attachments" | "tools" | "reasoning";
+export type ModelCapabilityStatus = "supported" | "unsupported" | "unknown";
+export type ModelCapabilityConfidence = "high" | "medium" | "low";
+export type ModelCapabilitySource =
+  | "vercel_gateway_models"
+  | "vercel_gateway_endpoints"
+  | "openrouter"
+  | "runtime_error_fallback"
+  | "runtime_success_probe"
+  | "manual";
+
+export type ModelCapabilityState = {
+  status: ModelCapabilityStatus;
+  confidence: ModelCapabilityConfidence;
+  source: ModelCapabilitySource;
+};
+
+export type ModelCapabilityRecord = Partial<
+  Record<ModelCapabilityKey, ModelCapabilityState>
+>;
+
+export type UserFacingModelCapabilities = Record<
+  ModelCapabilityKey,
+  ModelCapabilityStatus
+>;
+
 export type UserFacingChatModel = ChatModel & {
   source: "system" | "user";
   connectionId?: string;
   realId?: string;
+  capabilities?: Partial<UserFacingModelCapabilities>;
 };
 
 export type OpenAICompatibleModel = {

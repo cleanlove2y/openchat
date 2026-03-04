@@ -19,6 +19,8 @@
   "input.waitModel": "Please wait for the model to finish its response!",
   "upload.failed": "Failed to upload file, please try again!",
   "upload.failedPasted": "Failed to upload pasted image(s)",
+  "upload.unsupportedModelHint": "This model does not support attachments. Switch to another model to use uploaded files.",
+  "tools.unsupportedModelHint": "This model does not support tool use. Switch to another model if you need document, weather, or skill tools.",
   "model.searchPlaceholder": "Search models...",
   "model.empty": "No models found.",
   "model.group.user": "My Models",

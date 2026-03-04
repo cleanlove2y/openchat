@@ -1,4 +1,5 @@
-import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
+import { sql, type InferInsertModel, type InferSelectModel } from "drizzle-orm";
+import type { ModelCapabilityRecord } from "@/lib/user-llm";
 import {
   boolean,
   foreignKey,
@@ -7,6 +8,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -209,3 +211,48 @@ export const userLlmModelCache = pgTable("UserLlmModelCache", {
 
 export type UserLlmModelCache = InferSelectModel<typeof userLlmModelCache>;
 export type NewUserLlmModelCache = InferInsertModel<typeof userLlmModelCache>;
+
+export const modelCapabilityOverride = pgTable(
+  "ModelCapabilityOverride",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    sourceType: varchar("sourceType", {
+      enum: ["system", "user_connection"],
+    })
+      .notNull()
+      .default("system"),
+    connectionId: uuid("connectionId").references(() => userLlmConnection.id, {
+      onDelete: "cascade",
+    }),
+    providerKey: varchar("providerKey", { length: 64 }).notNull(),
+    modelId: text("modelId").notNull(),
+    capabilitiesJson: json("capabilitiesJson")
+      .$type<ModelCapabilityRecord>()
+      .notNull(),
+    lastDetectedAt: timestamp("lastDetectedAt").notNull().defaultNow(),
+    lastErrorSignature: text("lastErrorSignature"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    systemTargetUnique: uniqueIndex(
+      "ModelCapabilityOverride_system_target_unique"
+    )
+      .on(table.sourceType, table.modelId)
+      .where(sql`${table.sourceType} = 'system'`),
+    userConnectionTargetUnique: uniqueIndex(
+      "ModelCapabilityOverride_user_connection_target_unique"
+    )
+      .on(table.sourceType, table.connectionId, table.modelId)
+      .where(
+        sql`${table.sourceType} = 'user_connection' AND ${table.connectionId} IS NOT NULL`
+      ),
+  })
+);
+
+export type ModelCapabilityOverride = InferSelectModel<
+  typeof modelCapabilityOverride
+>;
+export type NewModelCapabilityOverride = InferInsertModel<
+  typeof modelCapabilityOverride
+>;

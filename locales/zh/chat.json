@@ -19,6 +19,8 @@
   "input.waitModel": "请等待模型完成当前回复！",
   "upload.failed": "文件上传失败，请重试！",
   "upload.failedPasted": "粘贴图片上传失败",
+  "upload.unsupportedModelHint": "此模型不支持附件上传。",
+  "tools.unsupportedModelHint": "此模型不支持工具调用（文档 / 天气 / 技能）。",
   "model.searchPlaceholder": "搜索模型...",
   "model.empty": "未找到模型。",
   "model.group.user": "我的模型",

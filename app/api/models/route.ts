@@ -1,14 +1,34 @@
 import { NextResponse } from "next/server";
+import {
+  buildModelListSeedCapabilitiesFromTags,
+} from "@/lib/ai/model-capabilities/vercel";
 import { chatModels } from "@/lib/ai/models";
-import { getUserLlmConnections, getUserLlmModelCache } from "@/lib/db/queries";
+import {
+  clearLegacySystemToolCapabilitySeeds,
+  getUserLlmConnections,
+  getUserLlmModelCache,
+  listModelCapabilityOverrides,
+  upsertModelCapabilityOverride,
+} from "@/lib/db/queries";
+import type { ModelCapabilityOverride as ModelCapabilityOverrideRow } from "@/lib/db/schema";
 import { auth } from "@/lib/server/auth/core";
 import {
   encodeUserConnectionModelId,
   getProviderDisplayName,
+  type ModelCapabilityKey,
+  type ModelCapabilityRecord,
+  type UserFacingModelCapabilities,
   normalizeConnectionProvider,
   type OpenAICompatibleModel,
   type UserFacingChatModel,
 } from "@/lib/user-llm";
+import { getAppLogger } from "@/lib/logging";
+
+type SystemModelFetchResult = {
+  models: UserFacingChatModel[];
+  seedByModelId: Map<string, ModelCapabilityRecord>;
+};
+const appLogger = getAppLogger();
 
 function fallbackSystemModels(): UserFacingChatModel[] {
   return chatModels.map((model) => ({
@@ -43,7 +63,15 @@ function isChatCapableModel(rawModel: Record<string, unknown>): boolean {
   );
 }
 
-async function fetchSystemModels(): Promise<UserFacingChatModel[]> {
+function buildDefaultCapabilities(): UserFacingModelCapabilities {
+  return {
+    attachments: "unknown",
+    tools: "unknown",
+    reasoning: "unknown",
+  };
+}
+
+async function fetchSystemModels(): Promise<SystemModelFetchResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 6000);
 
@@ -54,7 +82,10 @@ async function fetchSystemModels(): Promise<UserFacingChatModel[]> {
     });
 
     if (!response.ok) {
-      return fallbackSystemModels();
+      return {
+        models: fallbackSystemModels(),
+        seedByModelId: new Map(),
+      };
     }
 
     const payload = (await response.json().catch(() => null)) as {
@@ -62,10 +93,14 @@ async function fetchSystemModels(): Promise<UserFacingChatModel[]> {
     } | null;
 
     if (!payload?.data || !Array.isArray(payload.data)) {
-      return fallbackSystemModels();
+      return {
+        models: fallbackSystemModels(),
+        seedByModelId: new Map(),
+      };
     }
 
     const deduped = new Map<string, UserFacingChatModel>();
+    const seedByModelId = new Map<string, ModelCapabilityRecord>();
 
     for (const item of payload.data) {
       if (!item || typeof item !== "object") {
@@ -100,16 +135,73 @@ async function fetchSystemModels(): Promise<UserFacingChatModel[]> {
         description,
         source: "system",
       });
+
+      const seedCapabilities = buildModelListSeedCapabilitiesFromTags(
+        rawModel.tags
+      );
+      if (seedCapabilities) {
+        seedByModelId.set(id, seedCapabilities);
+      }
     }
 
     return deduped.size > 0
-      ? Array.from(deduped.values())
-      : fallbackSystemModels();
+      ? { models: Array.from(deduped.values()), seedByModelId }
+      : {
+          models: fallbackSystemModels(),
+          seedByModelId: new Map(),
+        };
   } catch {
-    return fallbackSystemModels();
+    return {
+      models: fallbackSystemModels(),
+      seedByModelId: new Map(),
+    };
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function getModelCapabilityRefKey(model: UserFacingChatModel): string {
+  const sourceType = model.source === "system" ? "system" : "user_connection";
+  const connectionId = model.connectionId ?? "system";
+  const modelId = model.realId ?? model.id;
+
+  return `${sourceType}:${connectionId}:${modelId}`;
+}
+
+function buildCapabilityOverrideRowMap(
+  overrides: ModelCapabilityOverrideRow[]
+): Map<string, ModelCapabilityOverrideRow> {
+  return new Map(
+    overrides.map((entry) => [
+      `${entry.sourceType}:${entry.connectionId ?? "system"}:${entry.modelId}`,
+      entry,
+    ])
+  );
+}
+
+function attachCapabilitiesFromOverrides(
+  models: UserFacingChatModel[],
+  overrides: ModelCapabilityOverrideRow[]
+) {
+  const overrideMap = buildCapabilityOverrideRowMap(overrides);
+
+  return models.map((model) => {
+    const capabilityRecord =
+      overrideMap.get(getModelCapabilityRefKey(model))?.capabilitiesJson ?? {};
+    const nextCapabilities = buildDefaultCapabilities();
+
+    for (const capabilityKey of Object.keys(
+      nextCapabilities
+    ) as ModelCapabilityKey[]) {
+      nextCapabilities[capabilityKey] =
+        capabilityRecord[capabilityKey]?.status ?? "unknown";
+    }
+
+    return {
+      ...model,
+      capabilities: nextCapabilities,
+    };
+  });
 }
 
 async function buildUserModels(userId: string): Promise<UserFacingChatModel[]> {
@@ -179,18 +271,122 @@ async function buildUserModels(userId: string): Promise<UserFacingChatModel[]> {
   return Array.from(mergedModels.values());
 }
 
+async function seedSystemModelCapabilities({
+  models,
+  seedByModelId,
+}: SystemModelFetchResult) {
+  const seedCandidates = models
+    .map((model) => ({
+      model,
+      capabilities: seedByModelId.get(model.id),
+    }))
+    .filter(
+      (
+        entry
+      ): entry is {
+        model: UserFacingChatModel;
+        capabilities: ModelCapabilityRecord;
+      } => Boolean(entry.capabilities)
+    );
+
+  if (seedCandidates.length === 0) {
+    return;
+  }
+
+  await Promise.all(
+    seedCandidates.map(({ model, capabilities }) =>
+      upsertModelCapabilityOverride({
+        sourceType: "system",
+        providerKey: model.provider,
+        modelId: model.id,
+        capabilities,
+      })
+    )
+  );
+}
+
 export async function GET() {
-  const systemModels = await fetchSystemModels();
+  const systemModelsResult = await fetchSystemModels();
+  const systemModels = systemModelsResult.models;
+  const systemModelIds = systemModels.map((model) => model.id);
+
+  await clearLegacySystemToolCapabilitySeeds({
+    modelIds: systemModelIds,
+  }).catch((error) => {
+    appLogger.warn(
+      {
+        event: "api.models.legacy_tool_seed_cleanup_failed",
+        error,
+      },
+      "Failed to clear legacy tag-based tool capability seeds; continuing without cleanup"
+    );
+  });
+  await seedSystemModelCapabilities(systemModelsResult).catch((error) => {
+    appLogger.warn(
+      {
+        event: "api.models.capability_seed_failed",
+        error,
+      },
+      "Failed to seed model capabilities from Vercel AI Gateway; continuing without persistence"
+    );
+  });
+
   const session = await auth();
 
   if (!session?.user?.id || session.user.type !== "regular") {
-    return NextResponse.json({ object: "list", data: systemModels });
+    const modelsWithCapabilities = await listModelCapabilityOverrides({
+      refs: systemModels.map((model) => ({
+        sourceType: "system" as const,
+        modelId: model.id,
+      })),
+    })
+      .then((overrides) => attachCapabilitiesFromOverrides(systemModels, overrides))
+      .catch((error) => {
+        appLogger.warn(
+          {
+            event: "api.models.capability_attach_failed",
+            error,
+          },
+          "Failed to load model capabilities; continuing with fallback capability defaults"
+        );
+        return systemModels.map((model) => ({
+          ...model,
+          capabilities: buildDefaultCapabilities(),
+        }));
+      });
+
+    return NextResponse.json({
+      object: "list",
+      data: modelsWithCapabilities,
+    });
   }
 
   const userModels = await buildUserModels(session.user.id);
+  const combinedModels = [...userModels, ...systemModels];
+  const modelsWithCapabilities = await listModelCapabilityOverrides({
+    refs: combinedModels.map((model) => ({
+      sourceType: model.source === "system" ? "system" : "user_connection",
+      connectionId: model.connectionId ?? null,
+      modelId: model.realId ?? model.id,
+    })),
+  })
+    .then((overrides) => attachCapabilitiesFromOverrides(combinedModels, overrides))
+    .catch((error) => {
+      appLogger.warn(
+        {
+          event: "api.models.capability_attach_failed",
+          error,
+        },
+        "Failed to load model capabilities; continuing with fallback capability defaults"
+      );
+      return combinedModels.map((model) => ({
+        ...model,
+        capabilities: buildDefaultCapabilities(),
+      }));
+    });
 
   return NextResponse.json({
     object: "list",
-    data: [...userModels, ...systemModels],
+    data: modelsWithCapabilities,
   });
 }

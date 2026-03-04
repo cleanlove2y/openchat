@@ -1,5 +1,4 @@
 import type { Geo } from "@vercel/functions";
-import { isReasoningModelId } from "@/lib/ai/models";
 import { artifactsPrompt } from "./artifacts";
 
 export const regularPrompt = `You are a friendly assistant. Keep responses concise, accurate, and helpful.
@@ -25,19 +24,17 @@ Only use this location context for geography-dependent requests.
 Ignore it when the user's request is not location-sensitive.`;
 
 export const systemPrompt = ({
-  selectedChatModel,
   requestHints,
+  includeArtifactsPrompt = true,
 }: {
-  selectedChatModel: string;
   requestHints: RequestHints;
+  includeArtifactsPrompt?: boolean;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
 
-  if (isReasoningModelId(selectedChatModel)) {
-    return `${regularPrompt}\n\n${requestPrompt}`;
-  }
-
-  return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
+  return includeArtifactsPrompt
+    ? `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`
+    : `${regularPrompt}\n\n${requestPrompt}`;
 };
 
 export function buildEffectiveSystemPrompt(sections: string[]): string {
