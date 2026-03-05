@@ -12,7 +12,13 @@ const filePartSchema = z.object({
   url: z.string().url(),
 });
 
-const partSchema = z.union([textPartSchema, filePartSchema]);
+const skillRefPartSchema = z.object({
+  type: z.literal("skill_ref"),
+  skillId: z.string().min(1),
+  label: z.string().optional(),
+});
+
+const partSchema = z.union([textPartSchema, filePartSchema, skillRefPartSchema]);
 
 const userMessageSchema = z.object({
   id: z.string().uuid(),

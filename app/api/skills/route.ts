@@ -13,12 +13,19 @@ const getHandler = async (_request: Request) => {
 
     // In the future, we can add more slash commands (not just skills)
     // Map them to a standard format for the client
-    const commands = skills.map((skill) => ({
-      id: skill.name, // Use the skill name as the unique id
-      title: skill.name,
-      description: skill.description || "No description provided.",
-      type: "skill",
-    }));
+    const MAX_DESCRIPTION_LENGTH = 100;
+    const commands = skills.map((skill) => {
+      const description = skill.description || "No description provided.";
+      return {
+        id: skill.id,
+        title: skill.name,
+        description:
+          description.length > MAX_DESCRIPTION_LENGTH
+            ? `${description.slice(0, MAX_DESCRIPTION_LENGTH)}…`
+            : description,
+        type: "skill",
+      };
+    });
 
     return NextResponse.json({ commands }, { status: 200 });
   } catch (error) {

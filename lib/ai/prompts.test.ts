@@ -150,6 +150,7 @@ test("prompt registry exports skills prompt builders", () => {
 
   const result = buildSkillsSystemPromptText([
     {
+      id: "resume-polisher",
       name: "Resume Polisher",
       description: "Improve resumes",
       source: "workspace",
@@ -161,6 +162,9 @@ test("prompt registry exports skills prompt builders", () => {
 
   assert.equal(result.includes("Call `loadSkill`"), true);
   assert.equal(result.includes("Do NOT call `load_skill`"), true);
+  // PR-3: id present, local skillDir path absent from prompt
+  assert.equal(result.includes("resume-polisher"), true);
+  assert.equal(result.includes("/tmp/skill"), false);
 });
 
 test("buildEffectiveSystemPrompt joins non-empty sections in order", () => {

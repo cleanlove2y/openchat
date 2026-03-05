@@ -8,7 +8,7 @@ export function buildSkillsSystemPromptText(skills: SkillMetadata[]): string {
   const skillList = skills
     .map(
       (skill) =>
-        `- ${skill.name}: ${skill.description} (source: ${skill.source}, path: ${skill.skillDir})`
+        `- [${skill.id}] ${skill.name}: ${skill.description} (source: ${skill.source})`
     )
     .join("\n");
 

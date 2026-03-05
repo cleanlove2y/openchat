@@ -55,6 +55,18 @@ function normalizeDescription(description: string): string {
   return description.length > 1024 ? description.slice(0, 1024) : description;
 }
 
+/**
+ * Convert a skill name into a stable lowercase slug id.
+ * e.g. "Resume Polisher & Deep Dive" -> "resume-polisher-deep-dive"
+ */
+export function slugifySkillId(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-") // collapse non-alphanumeric runs to hyphens
+    .replace(/^-+|-+$/g, "") // trim leading/trailing hyphens
+    || "skill"; // fallback if name was entirely non-alphanumeric
+}
+
 export async function loadSkillsSnapshot(
   config: SkillsConfig
 ): Promise<SkillsSnapshot> {
@@ -63,7 +75,7 @@ export async function loadSkillsSnapshot(
   }
 
   const snapshot = createEmptySkillsSnapshot();
-  const seenNames = new Set<string>();
+  const seenIds = new Set<string>();
   let maxCountErrorEmitted = false;
 
   const sourceRoots = resolveSkillSourceRoots(config);
@@ -255,23 +267,27 @@ export async function loadSkillsSnapshot(
         continue;
       }
 
-      const dedupeKey = parsed.frontmatter.name.toLowerCase();
-      if (seenNames.has(dedupeKey)) {
+      // Determine stable id: prefer explicit frontmatter id, otherwise slugify name.
+      const skillId =
+        parsed.frontmatter.id ?? slugifySkillId(parsed.frontmatter.name);
+
+      if (seenIds.has(skillId)) {
         snapshot.sourceStats[root.source].skipped += 1;
         pushError(
           snapshot.errors,
           root.source,
           "skill_name_duplicate",
-          "Skill name conflict with higher-precedence source",
+          `Skill id conflict ("${skillId}") with higher-precedence source`,
           skillFile,
           parsed.frontmatter.name
         );
         continue;
       }
 
-      seenNames.add(dedupeKey);
+      seenIds.add(skillId);
       snapshot.sourceStats[root.source].loaded += 1;
       snapshot.skills.push({
+        id: skillId,
         name: parsed.frontmatter.name,
         description: normalizeDescription(parsed.frontmatter.description),
         source: root.source,

@@ -52,8 +52,14 @@ export function parseSkillDocument(content: string): ParsedSkillDocument {
   const description = ensureStringField(frontmatter, "description");
   const metadata = ensureMetadataField(frontmatter);
 
+  // Optional explicit id: must be a non-empty string when present.
+  const rawId = frontmatter.id;
+  const id =
+    typeof rawId === "string" && rawId.trim() ? rawId.trim() : undefined;
+
   return {
     frontmatter: {
+      id,
       name,
       description,
       metadata,

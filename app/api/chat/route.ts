@@ -35,12 +35,12 @@ import {
   buildSkillsSystemPrompt,
   getSkillsConfig,
   getSkillsSnapshot,
-  loadSkillByName,
+  loadSkillById,
   shouldEnableSkillTooling,
 } from "@/lib/ai/skills";
 import {
-  collectSkillDirectiveNamesFromRequestBody,
-  extractSkillDirectives,
+  collectSkillRefsFromParts,
+  stripSkillRefParts,
 } from "@/lib/ai/skills/directives";
 import { createDocument } from "@/lib/ai/tools/create-document";
 import { getWeather } from "@/lib/ai/tools/get-weather";
@@ -112,33 +112,15 @@ function sanitizeUserSkillDirectivesForModel(
       return message;
     }
 
-    let changedMessage = false;
-    const nextParts = message.parts.map((part) => {
-      if (
-        part.type !== "text" ||
-        !("text" in part) ||
-        typeof part.text !== "string"
-      ) {
-        return part;
-      }
-
-      const { strippedText } = extractSkillDirectives(part.text);
-      if (strippedText !== part.text) {
-        changedMessage = true;
-        return { ...part, text: strippedText };
-      }
-
-      return part;
-    });
-
-    if (!changedMessage) {
+    const withoutSkillRefs = stripSkillRefParts(message.parts as unknown[]);
+    if (withoutSkillRefs.length === message.parts.length) {
       return message;
     }
 
     changedAny = true;
     return {
       ...message,
-      parts: nextParts,
+      parts: withoutSkillRefs as typeof message.parts,
     };
   });
 
@@ -317,10 +299,13 @@ const postHandler = async ({
   const modelUiMessages = stripUiOnlyPartsForModel(
     sanitizeUserSkillDirectivesForModel(uiMessages)
   );
-  const requestedSkillNames = collectSkillDirectiveNamesFromRequestBody({
-    message,
-    messages,
-  });
+
+  // Collect skill ids from skill_ref parts in the current message.
+  const latestMessageParts =
+    message?.parts ?? (Array.isArray(messages) && messages.length > 0
+      ? messages[messages.length - 1]?.parts
+      : undefined);
+  const requestedSkillIds: string[] = collectSkillRefsFromParts(latestMessageParts);
 
   const { longitude, latitude, city, country } = geolocation(request);
 
@@ -560,10 +545,11 @@ const postHandler = async ({
   const explicitlyLoadedSkills: Array<{ name: string; content: string }> = [];
   const missingExplicitSkillNames: string[] = [];
 
-  for (const requestedSkillName of requestedSkillNames) {
-    const loadedSkill = await loadSkillByName(
+  // Primary path: load by stable id (from skill_ref parts).
+  for (const requestedSkillId of requestedSkillIds) {
+    const loadedSkill = await loadSkillById(
       skillsSnapshot.skills,
-      requestedSkillName,
+      requestedSkillId,
       skillsConfig,
       {
         source: "explicit_directive",
@@ -572,7 +558,7 @@ const postHandler = async ({
     );
 
     if (!loadedSkill) {
-      missingExplicitSkillNames.push(requestedSkillName);
+      missingExplicitSkillNames.push(requestedSkillId);
       continue;
     }
 
@@ -582,11 +568,11 @@ const postHandler = async ({
     });
   }
 
-  if (requestedSkillNames.length > 0) {
+  if (requestedSkillIds.length > 0) {
     appLogger.info(
       {
         event: "skills.explicit_resolution",
-        requestedSkillNames,
+        requestedSkillIds,
         loadedSkillNames: explicitlyLoadedSkills.map((skill) => skill.name),
         missingSkillNames: missingExplicitSkillNames,
         chatId: id,
@@ -611,27 +597,18 @@ const postHandler = async ({
     explicitSkillsSystemPrompt,
   ]);
 
-  const executeLoadSkill = async ({
-    name,
-    invokedToolName,
-  }: {
-    name: string;
-    invokedToolName: "loadSkill" | "load_skill";
-  }) => {
-    const loadedSkill = await loadSkillByName(
+  const executeLoadSkill = async (name: string) => {
+    const loadedSkill = await loadSkillById(
       skillsSnapshot.skills,
       name,
       skillsConfig,
-      {
-        source: "tool",
-        invokedToolName,
-      }
+      { source: "tool", invokedToolName: "loadSkill" }
     );
 
     if (!loadedSkill) {
       return {
         error: `Skill '${name}' not found`,
-        availableSkills: skillsSnapshot.skills.map((skill) => skill.name),
+        availableSkills: skillsSnapshot.skills.map((skill) => skill.id),
       };
     }
 
@@ -640,24 +617,11 @@ const postHandler = async ({
 
   const loadSkillTool = skillToolingEnabled
     ? tool({
-        description: "Load a skill by name and return its full instructions",
+        description: "Load a skill by its id and return its full instructions",
         inputSchema: z.object({
-          name: z.string().describe("Skill name to load"),
+          name: z.string().describe("Skill id to load"),
         }),
-        execute: ({ name }) =>
-          executeLoadSkill({ name, invokedToolName: "loadSkill" }),
-      })
-    : undefined;
-
-  const loadSkillAliasTool = skillToolingEnabled
-    ? tool({
-        description:
-          "Compatibility alias for loading a skill by name and returning full instructions",
-        inputSchema: z.object({
-          name: z.string().describe("Skill name to load"),
-        }),
-        execute: ({ name }) =>
-          executeLoadSkill({ name, invokedToolName: "load_skill" }),
+        execute: ({ name }) => executeLoadSkill(name),
       })
     : undefined;
 
@@ -667,7 +631,6 @@ const postHandler = async ({
     | "updateDocument"
     | "requestSuggestions"
     | "loadSkill"
-    | "load_skill"
   > = [];
 
   if (isStandardToolingAllowedForCurrentModel) {
@@ -681,10 +644,6 @@ const postHandler = async ({
 
   if (loadSkillTool) {
     activeTools.push("loadSkill");
-  }
-
-  if (loadSkillAliasTool) {
-    activeTools.push("load_skill");
   }
 
   let streamWriter:
@@ -771,7 +730,6 @@ const postHandler = async ({
               }
             : {}),
           ...(loadSkillTool ? { loadSkill: loadSkillTool } : {}),
-          ...(loadSkillAliasTool ? { load_skill: loadSkillAliasTool } : {}),
         };
         const result = streamText({
           model: activeLanguageModel,
@@ -1005,11 +963,6 @@ const chatSubmitAudit = {
         trigger?: unknown;
         messageId?: unknown;
       };
-      const requestedSkillNames = collectSkillDirectiveNamesFromRequestBody({
-        message: body.message,
-        messages: body.messages,
-      });
-
       return {
         selectedChatModel:
           typeof body.selectedChatModel === "string"
@@ -1024,8 +977,6 @@ const chatSubmitAudit = {
         isRegenerateFlow: body.trigger === "regenerate-message",
         isToolApprovalFlow:
           Array.isArray(body.messages) && body.trigger !== "regenerate-message",
-        requestedSkillNames,
-        requestedSkillCount: requestedSkillNames.length,
       };
     } catch (_) {
       return undefined;

@@ -94,7 +94,7 @@ export function SlashCommandMenu({
             return (
               <button
                 className={cn(
-                  "relative flex cursor-pointer select-none items-center gap-3 rounded-md px-2 py-2 text-sm outline-none transition-colors",
+                  "relative flex w-full overflow-hidden cursor-pointer select-none items-center gap-3 rounded-md px-2 py-2 text-sm outline-none transition-colors",
                   isSelected
                     ? "bg-accent text-accent-foreground"
                     : "hover:bg-accent/50"
@@ -108,9 +108,12 @@ export function SlashCommandMenu({
                 <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-background border shadow-xs">
                   <WrenchIcon className="size-4 text-foreground/70" />
                 </div>
-                <div className="flex flex-col items-start min-w-0">
-                  <span className="font-medium truncate">{cmd.title}</span>
-                  <span className="text-xs text-muted-foreground truncate w-full">
+                <div className="flex flex-col items-start flex-1 min-w-0 text-left overflow-hidden">
+                  <span className="font-medium truncate w-full block">{cmd.title}</span>
+                  <span 
+                    className="text-xs text-muted-foreground truncate w-full mt-0.5 block"
+                    title={cmd.description}
+                  >
                     {cmd.description}
                   </span>
                 </div>

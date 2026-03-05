@@ -309,10 +309,11 @@ function PureMultimodalInput({
       return;
     }
 
-    const commandPrefix =
-      selectedSlashCommands.length > 0
-        ? `${selectedSlashCommands.map((c) => `[Use Skill: ${c.id}]`).join("\n")}\n\n`
-        : "";
+    const skillRefParts = selectedSlashCommands.map((c) => ({
+      type: "skill_ref",
+      skillId: c.id,
+      label: c.title,
+    }));
 
     sendMessage({
       role: "user",
@@ -323,11 +324,12 @@ function PureMultimodalInput({
           name: attachment.name,
           mediaType: attachment.contentType,
         })),
+        ...skillRefParts,
         {
           type: "text",
-          text: commandPrefix + input,
+          text: input,
         },
-      ],
+      ] as any,
     });
 
     setAttachments([]);
@@ -541,7 +543,7 @@ function PureMultimodalInput({
           >
             {selectedSlashCommands.map((cmd) => (
               <div
-                className="flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg px-2.5 py-1.5 text-sm shrink-0 whitespace-nowrap"
+                className="flex items-center gap-1.5 bg-blue-500/10 text-blue-600 border border-blue-500/20 rounded-lg px-2.5 py-1.5 text-sm shrink-0 whitespace-nowrap dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/30 font-medium"
                 key={cmd.id}
               >
                 <WrenchIcon className="size-4" />

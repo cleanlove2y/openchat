@@ -16,32 +16,19 @@ export function buildSkillsSystemPrompt(skills: SkillMetadata[]): string {
   return buildSkillsSystemPromptText(skills);
 }
 
-export async function loadSkillByName(
-  skills: SkillMetadata[],
-  name: string,
+// ─── Shared file-reading helper ───────────────────────────────────────────────
+
+async function readAndParseSkillFile(
+  matchedSkill: SkillMetadata,
   config: SkillsConfig,
-  context?: {
-    source?: "tool" | "explicit_directive" | "internal";
-    invokedToolName?: string | null;
-  }
+  context:
+    | {
+        source?: "tool" | "explicit_directive" | "internal";
+        invokedToolName?: string | null;
+      }
+    | undefined,
+  startedAt: number
 ): Promise<LoadedSkill | null> {
-  const startedAt = Date.now();
-  const normalizedName = name.trim().toLowerCase();
-  const matchedSkill = skills.find(
-    (skill) => skill.name.toLowerCase() === normalizedName
-  );
-
-  if (!matchedSkill) {
-    recordLoadSkillInvocation(
-      name,
-      false,
-      Date.now() - startedAt,
-      undefined,
-      context
-    );
-    return null;
-  }
-
   try {
     const stats = await withTimeout(
       stat(matchedSkill.skillFile),
@@ -91,7 +78,43 @@ export async function loadSkillByName(
       error instanceof Error ? error : new Error("Unknown skill load error"),
       context
     );
-
     return null;
   }
 }
+
+// ─── Primary lookup: by stable id (slug) ─────────────────────────────────────
+
+/**
+ * Load a skill by its stable slug id.
+ * This is the preferred lookup path for new messages that carry `skill_ref` parts.
+ */
+export async function loadSkillById(
+  skills: SkillMetadata[],
+  id: string,
+  config: SkillsConfig,
+  context?: {
+    source?: "tool" | "explicit_directive" | "internal";
+    invokedToolName?: string | null;
+  }
+): Promise<LoadedSkill | null> {
+  const startedAt = Date.now();
+  const normalizedId = id.trim().toLowerCase();
+  const matchedSkill = skills.find(
+    (skill) => skill.id.toLowerCase() === normalizedId
+  );
+
+  if (!matchedSkill) {
+    recordLoadSkillInvocation(
+      id,
+      false,
+      Date.now() - startedAt,
+      undefined,
+      context
+    );
+    return null;
+  }
+
+  return readAndParseSkillFile(matchedSkill, config, context, startedAt);
+}
+
+

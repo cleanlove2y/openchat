@@ -86,6 +86,12 @@ const PurePreviewMessage = ({
     isLoading &&
     (messageParts.length === 0 || !hasVisibleContent);
 
+  const userSkillRefs = message.role === "user"
+    ? (messageParts as unknown as Array<{ type: string; skillId?: string; label?: string }>)
+        .filter((part) => part.type === "skill_ref" && typeof part.skillId === "string")
+        .map((part) => part as { type: "skill_ref"; skillId: string; label?: string })
+    : [];
+
   useDataStream();
 
   return (
@@ -154,13 +160,13 @@ const PurePreviewMessage = ({
             )}
 
           {shouldShowEmptyCursor && (
-            <div className="not-prose flex flex-1 min-w-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-[#121212] text-sm transition-all pointer-events-none mb-2 mt-2">
+            <div className="not-prose flex flex-1 min-w-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-zinc-100 dark:bg-[#121212] text-sm transition-all pointer-events-none mb-2 mt-2">
               <div className="flex items-center gap-2 px-3 py-2.5">
-                <RegenerateSparkIcon className="size-4 animate-spin text-blue-400" />
+                <RegenerateSparkIcon className="size-4 animate-spin text-blue-500 dark:text-blue-400" />
                 <span className="font-medium text-foreground/90">Thinking</span>
                 <ThinkingIndicator
-                  className="text-blue-400"
-                  dotClassName="bg-blue-400"
+                  className="text-blue-500 dark:text-blue-400"
+                  dotClassName="bg-blue-500 dark:bg-blue-400"
                 />
               </div>
             </div>
@@ -191,6 +197,23 @@ const PurePreviewMessage = ({
             />
           )}
 
+          {userSkillRefs.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 justify-end mb-1">
+              {userSkillRefs.map((skillRef) => {
+                const label = skillRef.label ?? skillRef.skillId;
+                return (
+                  <div
+                    key={`${message.id}-${skillRef.skillId}`}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-blue-500/10 text-blue-600 border border-blue-500/20 rounded-full select-none dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/30"
+                  >
+                    <WrenchIcon className="size-3" />
+                    <span>@{label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {messageParts.map((part, index) => {
             const { type } = part;
             const key = `message-${message.id}-part-${index}`;
@@ -199,20 +222,16 @@ const PurePreviewMessage = ({
               return null;
             }
 
+            if ((type as string) === "skill_ref") {
+              return null;
+            }
+
             if (type === "text") {
               if (mode === "view") {
-                let textContent = sanitizeText(part.text);
-                const skills: string[] = [];
+                const textContent = sanitizeText(part.text);
 
-                if (message.role === "user") {
-                  const skillRegex = /\[Use Skill: ([^\]]+)\]/g;
-                  for (const match of textContent.matchAll(skillRegex)) {
-                    skills.push(match[1]);
-                  }
-                  // Remove the tags and any leading newlines they left behind
-                  textContent = textContent
-                    .replace(/\[Use Skill: [^\]]+\]/g, "")
-                    .replace(/^\n+/, "");
+                if (!textContent.trim()) {
+                  return null;
                 }
 
                 return (
@@ -222,43 +241,22 @@ const PurePreviewMessage = ({
                     })}
                     key={key}
                   >
-                    {message.role === "user" && skills.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5 justify-end">
-                        {skills.map((skill) => (
-                          <TooltipProvider key={`${message.id}-${skill}`}>
-                            <Tooltip delayDuration={0}>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center justify-center size-[34px] bg-primary/10 text-primary border border-primary/20 rounded-xl shrink-0">
-                                  <WrenchIcon className="size-4" />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent sideOffset={8}>
-                                Used Skill: @{skill}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ))}
-                      </div>
-                    )}
-
-                    {(textContent.trim() || skills.length === 0) && (
-                      <MessageContent
-                        className={cn({
-                          "break-words w-fit rounded-2xl px-3 py-2 text-right text-white":
-                            message.role === "user",
-                          "bg-transparent px-0 py-0 text-left":
-                            message.role === "assistant",
-                        })}
-                        data-testid="message-content"
-                        style={
-                          message.role === "user"
-                            ? { backgroundColor: "#006cff" }
-                            : undefined
-                        }
-                      >
-                        <Response>{textContent}</Response>
-                      </MessageContent>
-                    )}
+                    <MessageContent
+                      className={cn({
+                        "break-words w-fit rounded-2xl px-3 py-2 text-right text-white":
+                          message.role === "user",
+                        "bg-transparent px-0 py-0 text-left":
+                          message.role === "assistant",
+                      })}
+                      data-testid="message-content"
+                      style={
+                        message.role === "user"
+                          ? { backgroundColor: "#006cff" }
+                          : undefined
+                      }
+                    >
+                      <Response>{textContent}</Response>
+                    </MessageContent>
                   </div>
                 );
               }
@@ -542,8 +540,8 @@ export const ThinkingMessage = ({
             className={cn(
               "not-prose relative h-10 w-full overflow-hidden rounded-lg border text-sm transition-colors duration-200",
               isStreamingPhase
-                ? "border-border/50 bg-[#121212]"
-                : "border-border/40 bg-[#121212]/85"
+                ? "border-border/50 bg-zinc-100 dark:bg-[#121212]"
+                : "border-border/40 bg-zinc-100/85 dark:bg-[#121212]/85"
             )}
           >
             <div
@@ -553,8 +551,8 @@ export const ThinkingMessage = ({
               )}
             >
               <ThinkingIndicator
-                className="text-zinc-300"
-                dotClassName="bg-zinc-300"
+                className="text-zinc-500 dark:text-zinc-300"
+                dotClassName="bg-zinc-500 dark:bg-zinc-300"
               />
             </div>
 
@@ -564,11 +562,11 @@ export const ThinkingMessage = ({
                 isStreamingPhase ? "opacity-100" : "opacity-0"
               )}
             >
-              <RegenerateSparkIcon className="size-4 animate-spin text-blue-400" />
+              <RegenerateSparkIcon className="size-4 animate-spin text-blue-500 dark:text-blue-400" />
               <span className="font-medium text-foreground/90">Thinking</span>
               <ThinkingIndicator
-                className="text-sky-400"
-                dotClassName="bg-sky-400"
+                className="text-sky-500 dark:text-sky-400"
+                dotClassName="bg-sky-500 dark:bg-sky-400"
               />
             </div>
           </div>

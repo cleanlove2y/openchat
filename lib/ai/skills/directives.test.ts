@@ -1,52 +1,82 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  collectSkillDirectiveNamesFromParts,
-  collectSkillDirectiveNamesFromRequestBody,
-  extractSkillDirectives,
+  collectSkillRefsFromParts,
+  stripSkillRefParts,
 } from "@/lib/ai/skills/directives";
 
-test("extractSkillDirectives collects unique skill names and strips markers", () => {
-  const input = `[Use Skill: Resume Polisher & Deep Dive Coach]
-[Use Skill: resume polisher & deep dive coach]
+// ─── collectSkillRefsFromParts ────────────────────────────────────────────────
 
-请帮我优化简历`;
-
-  const result = extractSkillDirectives(input);
-
-  assert.deepEqual(result.requestedSkillNames, [
-    "Resume Polisher & Deep Dive Coach",
-  ]);
-  assert.equal(result.strippedText, "请帮我优化简历");
-});
-
-test("collectSkillDirectiveNamesFromParts only reads text parts", () => {
-  const names = collectSkillDirectiveNamesFromParts([
-    { type: "file", url: "https://example.com/demo.png" },
-    { type: "text", text: "[Use Skill: Skill A]\n\nhello" },
-    { type: "text", text: "[Use Skill: skill a]\n[Use Skill: Skill B]" },
+test("collectSkillRefsFromParts extracts skillIds from skill_ref parts", () => {
+  const ids = collectSkillRefsFromParts([
+    { type: "text", text: "hello" },
+    { type: "skill_ref", skillId: "resume-polisher" },
+    { type: "file", url: "https://example.com/doc.pdf" },
+    { type: "skill_ref", skillId: "code-reviewer", label: "Code Reviewer" },
   ]);
 
-  assert.deepEqual(names, ["Skill A", "Skill B"]);
+  assert.deepEqual(ids, ["resume-polisher", "code-reviewer"]);
 });
 
-test("collectSkillDirectiveNamesFromRequestBody uses latest user message in tool approval flow", () => {
-  const names = collectSkillDirectiveNamesFromRequestBody({
-    messages: [
-      {
-        role: "user",
-        parts: [{ type: "text", text: "[Use Skill: Old Skill]\nold" }],
-      },
-      {
-        role: "assistant",
-        parts: [{ type: "text", text: "ok" }],
-      },
-      {
-        role: "user",
-        parts: [{ type: "text", text: "[Use Skill: New Skill]\nnew" }],
-      },
-    ],
-  });
+test("collectSkillRefsFromParts deduplicates skill ids (case-insensitive)", () => {
+  const ids = collectSkillRefsFromParts([
+    { type: "skill_ref", skillId: "Resume-Polisher" },
+    { type: "skill_ref", skillId: "resume-polisher" },
+    { type: "skill_ref", skillId: "code-reviewer" },
+  ]);
 
-  assert.deepEqual(names, ["New Skill"]);
+  assert.deepEqual(ids, ["resume-polisher", "code-reviewer"]);
+});
+
+test("collectSkillRefsFromParts ignores parts without type skill_ref", () => {
+  const ids = collectSkillRefsFromParts([
+    { type: "text", text: "hello" },
+    { type: "file", url: "https://example.com/img.png" },
+  ]);
+
+  assert.deepEqual(ids, []);
+});
+
+test("collectSkillRefsFromParts returns empty for non-array input", () => {
+  assert.deepEqual(collectSkillRefsFromParts(null), []);
+  assert.deepEqual(collectSkillRefsFromParts(undefined), []);
+  assert.deepEqual(collectSkillRefsFromParts("skill_ref"), []);
+});
+
+test("collectSkillRefsFromParts ignores skill_ref parts with missing or empty skillId", () => {
+  const ids = collectSkillRefsFromParts([
+    { type: "skill_ref" }, // missing skillId
+    { type: "skill_ref", skillId: "" }, // empty skillId
+    { type: "skill_ref", skillId: "  " }, // whitespace-only id
+    { type: "skill_ref", skillId: "valid-skill" },
+  ]);
+
+  assert.deepEqual(ids, ["valid-skill"]);
+});
+
+// ─── stripSkillRefParts ───────────────────────────────────────────────────────
+
+test("stripSkillRefParts removes skill_ref parts and keeps others", () => {
+  const parts = [
+    { type: "text", text: "hello" },
+    { type: "skill_ref", skillId: "resume-polisher" },
+    { type: "file", url: "https://example.com/doc.pdf" },
+    { type: "skill_ref", skillId: "code-reviewer" },
+  ];
+
+  const result = stripSkillRefParts(parts);
+
+  assert.deepEqual(result, [
+    { type: "text", text: "hello" },
+    { type: "file", url: "https://example.com/doc.pdf" },
+  ]);
+});
+
+test("stripSkillRefParts returns all parts when none are skill_ref", () => {
+  const parts = [
+    { type: "text", text: "hello" },
+    { type: "file", url: "https://example.com/img.png" },
+  ];
+
+  assert.deepEqual(stripSkillRefParts(parts), parts);
 });

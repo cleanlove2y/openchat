@@ -8,12 +8,13 @@ import {
   buildSkillsSystemPrompt,
   getSkillsConfig,
   getSkillsSnapshot,
-  loadSkillByName,
+  loadSkillById,
   parseSkillFrontmatter,
   resetSkillsRuntimeForTests,
   shouldEnableSkillTooling,
   stripFrontmatter,
 } from "@/lib/ai/skills";
+import { slugifySkillId } from "@/lib/ai/skills/loader";
 import { withTimeout } from "@/lib/ai/skills/security";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -251,7 +252,7 @@ body`
   }
 });
 
-test("loadSkillByName returns body only (progressive disclosure)", async () => {
+test("loadSkillById returns body only (progressive disclosure)", async () => {
   const sandbox = await createSandbox();
   try {
     await writeSkill(
@@ -262,9 +263,9 @@ test("loadSkillByName returns body only (progressive disclosure)", async () => {
 
     const config = getSkillsConfig(sandbox.root);
     const snapshot = await getSkillsSnapshot(config);
-    const loaded = await loadSkillByName(
+    const loaded = await loadSkillById(
       snapshot.skills,
-      "intent-router",
+      "intent-router", // slug matches the name
       config
     );
 
@@ -286,6 +287,7 @@ test("shouldEnableSkillTooling respects enabled flag and skill count", () => {
 test("buildSkillsSystemPrompt enforces canonical loadSkill tool naming", () => {
   const prompt = buildSkillsSystemPrompt([
     {
+      id: "resume-polisher",
       name: "Resume Polisher",
       description: "Improve resumes",
       source: "workspace",
@@ -297,6 +299,9 @@ test("buildSkillsSystemPrompt enforces canonical loadSkill tool naming", () => {
 
   assert.equal(prompt.includes("loadSkill"), true);
   assert.equal(prompt.includes("Do NOT call `load_skill`"), true);
+  // PR-3: id should be present in the skill list; local path should not be exposed.
+  assert.equal(prompt.includes("resume-polisher"), true);
+  assert.equal(prompt.includes("/tmp/skill"), false);
 });
 
 test("ENABLE_SKILLS defaults to true and SKILLS_DIRS is ignored", () => {
@@ -352,5 +357,95 @@ test("missing optional skill roots are treated as empty sources", async () => {
     );
   } finally {
     await cleanupSandbox(root);
+  }
+});
+
+// ─── PR-1: id infrastructure tests ───────────────────────────────────────────
+
+test("slugifySkillId converts name to stable lowercase slug", () => {
+  assert.equal(slugifySkillId("Resume Polisher"), "resume-polisher");
+  assert.equal(slugifySkillId("Skill A & B"), "skill-a-b");
+  assert.equal(slugifySkillId("UPPER CASE"), "upper-case");
+  assert.equal(slugifySkillId("  leading/trailing  "), "leading-trailing");
+  assert.equal(slugifySkillId("---"), "skill"); // fallback for all-non-alphanumeric
+});
+
+test("skill id is auto-generated from name when frontmatter omits id", async () => {
+  const sandbox = await createSandbox();
+  try {
+    await writeSkill(
+      sandbox.workspaceDir,
+      "my-skill",
+      "---\nname: Resume Polisher\ndescription: test\n---\nbody"
+    );
+    const snapshot = await getSkillsSnapshot(getSkillsConfig(sandbox.root));
+    assert.equal(snapshot.skills.length, 1);
+    assert.equal(snapshot.skills[0]?.id, "resume-polisher");
+  } finally {
+    await cleanupSandbox(sandbox.root);
+  }
+});
+
+test("explicit frontmatter id takes priority over slugified name", async () => {
+  const sandbox = await createSandbox();
+  try {
+    await writeSkill(
+      sandbox.workspaceDir,
+      "my-skill",
+      "---\nid: my-custom-id\nname: Resume Polisher\ndescription: test\n---\nbody"
+    );
+    const snapshot = await getSkillsSnapshot(getSkillsConfig(sandbox.root));
+    assert.equal(snapshot.skills.length, 1);
+    assert.equal(snapshot.skills[0]?.id, "my-custom-id");
+    assert.equal(snapshot.skills[0]?.name, "Resume Polisher");
+  } finally {
+    await cleanupSandbox(sandbox.root);
+  }
+});
+
+test("skill id dedup: same id from different sources keeps higher-priority source", async () => {
+  const sandbox = await createSandbox();
+  try {
+    // Both skills resolve to the same slug id "code-reviewer"
+    await writeSkill(
+      sandbox.bundledDir,
+      "code-reviewer-bundled",
+      "---\nname: Code Reviewer\ndescription: bundled\n---\nbundled body"
+    );
+    await writeSkill(
+      sandbox.workspaceDir,
+      "code-reviewer-workspace",
+      "---\nname: Code Reviewer\ndescription: workspace\n---\nworkspace body"
+    );
+
+    const snapshot = await getSkillsSnapshot(getSkillsConfig(sandbox.root));
+    // workspace > bundled, so only 1 skill loaded; bundled is skipped
+    assert.equal(snapshot.skills.length, 1);
+    assert.equal(snapshot.skills[0]?.id, "code-reviewer");
+    assert.equal(snapshot.skills[0]?.source, "workspace");
+    assert.equal(
+      snapshot.errors.some((e) => e.code === "skill_name_duplicate"),
+      true
+    );
+  } finally {
+    await cleanupSandbox(sandbox.root);
+  }
+});
+
+test("loaded skill has id field set", async () => {
+  const sandbox = await createSandbox();
+  try {
+    await writeSkill(
+      sandbox.workspaceDir,
+      "some-skill",
+      "---\nname: My Skill\ndescription: desc\n---\nbody"
+    );
+    const snapshot = await getSkillsSnapshot(getSkillsConfig(sandbox.root));
+    const skill = snapshot.skills[0];
+    assert.ok(skill);
+    assert.equal(typeof skill.id, "string");
+    assert.ok(skill.id.length > 0);
+  } finally {
+    await cleanupSandbox(sandbox.root);
   }
 });

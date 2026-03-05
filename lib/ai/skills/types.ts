@@ -16,6 +16,8 @@ export type SkillLoadErrorCode =
   | "runtime_read_failed";
 
 export type SkillMetadata = {
+  /** Stable slug-style identifier (e.g. "resume-polisher"). Unique across loaded skills. */
+  id: string;
   name: string;
   description: string;
   source: SkillSource;
@@ -50,6 +52,8 @@ export type SkillsSnapshot = {
 
 export type ParsedSkillDocument = {
   frontmatter: {
+    /** Optional explicit id from frontmatter; undefined when not set. */
+    id?: string;
     name: string;
     description: string;
     metadata: Record<string, unknown>;

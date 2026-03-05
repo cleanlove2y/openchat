@@ -53,9 +53,10 @@ export function parseSkillFrontmatter(
 export { stripFrontmatter } from "./skills/parser";
 export {
   buildSkillsSystemPrompt,
-  loadSkillByName,
+  loadSkillById,
   shouldEnableSkillTooling,
 } from "./skills/runtime";
+export type { SkillRefPart } from "./skills/directives";
 
 export function resetSkillsRuntimeForTests(): void {
   resetSkillsCache();
