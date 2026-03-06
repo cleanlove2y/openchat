@@ -90,10 +90,9 @@ function PureArtifact({
 }) {
   const { artifact, setArtifact, metadata, setMetadata } = useArtifact();
 
-  const {
-    data: documents,
-    isLoading: isDocumentsFetching,
-  } = useSWR<Document[]>(
+  const { data: documents, isLoading: isDocumentsFetching } = useSWR<
+    Document[]
+  >(
     artifact.documentId !== "init" && artifact.status !== "streaming"
       ? `/api/document?id=${artifact.documentId}`
       : null,
@@ -288,7 +287,7 @@ function PureArtifact({
 
     initializedDocumentIdRef.current = artifact.documentId;
 
-    void artifactDefinition.initialize({
+    artifactDefinition.initialize({
       documentId: artifact.documentId,
       setMetadata,
     });

@@ -286,7 +286,10 @@ const DocumentContent = ({ document }: { document: Document }) => {
           ) : document.kind === "code" ? (
             <div className="relative flex w-full flex-1 min-h-[320px]">
               <div className="absolute inset-0">
-                <CodeEditor {...commonProps} onSaveContent={handleSaveContent} />
+                <CodeEditor
+                  {...commonProps}
+                  onSaveContent={handleSaveContent}
+                />
               </div>
             </div>
           ) : document.kind === "sheet" ? (

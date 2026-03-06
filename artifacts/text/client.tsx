@@ -23,7 +23,9 @@ export const textArtifact = new Artifact<"text", TextArtifactMetadata>({
   description: "Useful for text content, like drafting essays and emails.",
   initialize: async ({ documentId, setMetadata }) => {
     try {
-      const suggestions = await fetcher(`/api/suggestions?documentId=${documentId}`);
+      const suggestions = await fetcher(
+        `/api/suggestions?documentId=${documentId}`
+      );
 
       setMetadata({
         suggestions,

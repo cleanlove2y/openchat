@@ -3,12 +3,6 @@ import type { UseChatHelpers } from "@ai-sdk/react";
 import { ChevronLeft, ChevronRight, WrenchIcon } from "lucide-react";
 import { useState } from "react";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
 import { cn, sanitizeText } from "@/lib/utils";
@@ -27,8 +21,8 @@ import {
 import { RegenerateSparkIcon, SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { MessageEditor } from "./message-editor";
-import { collectMessageReasoning } from "./message-reasoning-group";
 import { MessageReasoning } from "./message-reasoning";
+import { collectMessageReasoning } from "./message-reasoning-group";
 import { PreviewAttachment } from "./preview-attachment";
 import { Weather } from "./weather";
 
@@ -86,11 +80,24 @@ const PurePreviewMessage = ({
     isLoading &&
     (messageParts.length === 0 || !hasVisibleContent);
 
-  const userSkillRefs = message.role === "user"
-    ? (messageParts as unknown as Array<{ type: string; skillId?: string; label?: string }>)
-        .filter((part) => part.type === "skill_ref" && typeof part.skillId === "string")
-        .map((part) => part as { type: "skill_ref"; skillId: string; label?: string })
-    : [];
+  const userSkillRefs =
+    message.role === "user"
+      ? (
+          messageParts as unknown as Array<{
+            type: string;
+            skillId?: string;
+            label?: string;
+          }>
+        )
+          .filter(
+            (part) =>
+              part.type === "skill_ref" && typeof part.skillId === "string"
+          )
+          .map(
+            (part) =>
+              part as { type: "skill_ref"; skillId: string; label?: string }
+          )
+      : [];
 
   useDataStream();
 
@@ -203,8 +210,8 @@ const PurePreviewMessage = ({
                 const label = skillRef.label ?? skillRef.skillId;
                 return (
                   <div
-                    key={`${message.id}-${skillRef.skillId}`}
                     className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-blue-500/10 text-blue-600 border border-blue-500/20 rounded-full select-none dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/30"
+                    key={`${message.id}-${skillRef.skillId}`}
                   >
                     <WrenchIcon className="size-3" />
                     <span>@{label}</span>

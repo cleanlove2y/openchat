@@ -4,11 +4,11 @@ import test from "node:test";
 import {
   buildEndpointToolCapabilityRecord,
   buildModelListSeedCapabilitiesFromTags,
+  getVercelModelEndpointsUrl,
   isLegacyTagBasedToolCapabilitySource,
   MODEL_CAPABILITY_ENDPOINT_TTL_MS,
-  shouldRefreshEndpointToolCapability,
-  getVercelModelEndpointsUrl,
   parseToolCapabilityFromEndpointPayload,
+  shouldRefreshEndpointToolCapability,
 } from "./vercel";
 
 test("buildModelListSeedCapabilitiesFromTags only seeds attachments and reasoning", () => {
@@ -88,7 +88,9 @@ test("shouldRefreshEndpointToolCapability refreshes missing, legacy, and expired
   assert.equal(
     shouldRefreshEndpointToolCapability({
       source: "vercel_gateway_endpoints",
-      lastDetectedAt: new Date(Date.now() - MODEL_CAPABILITY_ENDPOINT_TTL_MS - 1),
+      lastDetectedAt: new Date(
+        Date.now() - MODEL_CAPABILITY_ENDPOINT_TTL_MS - 1
+      ),
     }),
     true
   );
@@ -109,7 +111,10 @@ test("shouldRefreshEndpointToolCapability refreshes missing, legacy, and expired
 
 test("isLegacyTagBasedToolCapabilitySource detects legacy Vercel tag sources", () => {
   assert.equal(isLegacyTagBasedToolCapabilitySource("vercel_gateway"), true);
-  assert.equal(isLegacyTagBasedToolCapabilitySource("vercel_gateway_models"), true);
+  assert.equal(
+    isLegacyTagBasedToolCapabilitySource("vercel_gateway_models"),
+    true
+  );
   assert.equal(
     isLegacyTagBasedToolCapabilitySource("vercel_gateway_endpoints"),
     false

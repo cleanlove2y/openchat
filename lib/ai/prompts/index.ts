@@ -7,6 +7,7 @@ export {
   textDocumentCreatePrompt,
   updateDocumentPrompt,
 } from "./artifacts";
+export type { RequestHints } from "./chat";
 export {
   buildEffectiveSystemPrompt,
   getRequestPromptFromHints,
@@ -14,7 +15,6 @@ export {
   systemPrompt,
   titlePrompt,
 } from "./chat";
-export type { RequestHints } from "./chat";
 export {
   buildExplicitSkillsContextPrompt,
   buildSkillsSystemPromptText,

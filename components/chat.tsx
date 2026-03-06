@@ -198,11 +198,7 @@ export function Chat({
         messages.length === 0 &&
         pathname !== targetPath
       ) {
-        window.history.pushState(
-          null,
-          "",
-          targetPath
-        );
+        window.history.pushState(null, "", targetPath);
       }
 
       return sendMessage(...args);

@@ -73,12 +73,18 @@ export function useAutoResume({
       }
     };
 
-    void resume();
+    resume();
 
     return () => {
       cancelled = true;
     };
-  }, [autoResume, initialMessages, onResumeFinish, onResumeStart, resumeStream]);
+  }, [
+    autoResume,
+    initialMessages,
+    onResumeFinish,
+    onResumeStart,
+    resumeStream,
+  ]);
 
   useEffect(() => {
     if (!dataStream) {

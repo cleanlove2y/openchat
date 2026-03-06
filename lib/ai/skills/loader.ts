@@ -60,11 +60,13 @@ function normalizeDescription(description: string): string {
  * e.g. "Resume Polisher & Deep Dive" -> "resume-polisher-deep-dive"
  */
 export function slugifySkillId(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-") // collapse non-alphanumeric runs to hyphens
-    .replace(/^-+|-+$/g, "") // trim leading/trailing hyphens
-    || "skill"; // fallback if name was entirely non-alphanumeric
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-") // collapse non-alphanumeric runs to hyphens
+      .replace(/^-+|-+$/g, "") || // trim leading/trailing hyphens
+    "skill"
+  ); // fallback if name was entirely non-alphanumeric
 }
 
 export async function loadSkillsSnapshot(

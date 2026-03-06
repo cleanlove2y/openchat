@@ -1,9 +1,9 @@
 import { readFile, stat } from "node:fs/promises";
+import { buildSkillsSystemPromptText } from "../prompts/skills";
 import { parseSkillDocument } from "./parser";
 import { withTimeout } from "./security";
 import { recordLoadSkillInvocation } from "./telemetry";
 import type { LoadedSkill, SkillMetadata, SkillsConfig } from "./types";
-import { buildSkillsSystemPromptText } from "../prompts/skills";
 
 export function shouldEnableSkillTooling(
   enabled: boolean,
@@ -114,7 +114,5 @@ export async function loadSkillById(
     return null;
   }
 
-  return readAndParseSkillFile(matchedSkill, config, context, startedAt);
+  return await readAndParseSkillFile(matchedSkill, config, context, startedAt);
 }
-
-

@@ -81,7 +81,8 @@ Requirements:
 
 export const updateDocumentPrompt = (type: ArtifactKind) => {
   let mediaType = "document";
-  let outputInstruction = "Output only the fully updated document, with no commentary.";
+  let outputInstruction =
+    "Output only the fully updated document, with no commentary.";
 
   if (type === "code") {
     mediaType = "code snippet";
@@ -122,4 +123,4 @@ User's requested changes:
 BEGIN REQUESTED CHANGES
 ${description}
 END REQUESTED CHANGES`;
-};
+}

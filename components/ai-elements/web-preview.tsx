@@ -238,22 +238,25 @@ export const WebPreviewConsole = ({
           {logs.length === 0 ? (
             <p className="text-muted-foreground">No console output</p>
           ) : (
-            logs.map((log, index) => (
-              <div
-                className={cn(
-                  "text-xs",
-                  log.level === "error" && "text-destructive",
-                  log.level === "warn" && "text-yellow-600",
-                  log.level === "log" && "text-foreground"
-                )}
-                key={`${log.timestamp.getTime()}-${index}`}
-              >
-                <span className="text-muted-foreground">
-                  {log.timestamp.toLocaleTimeString()}
-                </span>{" "}
-                {log.message}
-              </div>
-            ))
+            logs.map((log, index) => {
+              const logKey = `${log.timestamp.getTime()}-${index}`;
+              return (
+                <div
+                  className={cn(
+                    "text-xs",
+                    log.level === "error" && "text-destructive",
+                    log.level === "warn" && "text-yellow-600",
+                    log.level === "log" && "text-foreground"
+                  )}
+                  key={logKey}
+                >
+                  <span className="text-muted-foreground">
+                    {log.timestamp.toLocaleTimeString()}
+                  </span>{" "}
+                  {log.message}
+                </div>
+              );
+            })
           )}
           {children}
         </div>

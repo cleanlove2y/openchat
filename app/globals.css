@@ -357,7 +357,8 @@
   @apply text-zinc-600 dark:text-zinc-400 leading-relaxed mb-4;
 }
 
-.prose.artifact-prose ul, .prose.artifact-prose ol {
+.prose.artifact-prose ul,
+.prose.artifact-prose ol {
   @apply my-6 space-y-2;
 }
 

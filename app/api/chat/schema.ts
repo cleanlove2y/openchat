@@ -18,7 +18,11 @@ const skillRefPartSchema = z.object({
   label: z.string().optional(),
 });
 
-const partSchema = z.union([textPartSchema, filePartSchema, skillRefPartSchema]);
+const partSchema = z.union([
+  textPartSchema,
+  filePartSchema,
+  skillRefPartSchema,
+]);
 
 const userMessageSchema = z.object({
   id: z.string().uuid(),

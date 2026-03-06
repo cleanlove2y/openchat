@@ -1,5 +1,4 @@
-import { sql, type InferInsertModel, type InferSelectModel } from "drizzle-orm";
-import type { ModelCapabilityRecord } from "@/lib/user-llm";
+import { type InferInsertModel, type InferSelectModel, sql } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
@@ -12,6 +11,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { ModelCapabilityRecord } from "@/lib/user-llm";
 
 export const user = pgTable("User", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),

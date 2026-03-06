@@ -18,14 +18,19 @@ import type { ArtifactKind } from "@/components/artifact";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { OpenChatError } from "../errors";
 import { getAppLogger } from "../logging";
+import type {
+  ModelCapabilityKey,
+  ModelCapabilityRecord,
+  ModelCapabilitySource,
+} from "../user-llm";
 import { generateUUID } from "../utils";
 import {
   type Chat,
   chat,
   type DBMessage,
   document,
-  message,
   type ModelCapabilityOverride,
+  message,
   modelCapabilityOverride,
   type NewModelCapabilityOverride,
   type NewUserLlmConnection,
@@ -42,11 +47,6 @@ import {
   vote,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
-import type {
-  ModelCapabilityKey,
-  ModelCapabilityRecord,
-  ModelCapabilitySource,
-} from "../user-llm";
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -964,18 +964,24 @@ export async function getModelCapabilityOverride({
   const safeConnectionId = connectionId ?? null;
 
   try {
-    const query = db.select().from(modelCapabilityOverride).where(
-      sourceType === "system"
-        ? and(
-            eq(modelCapabilityOverride.sourceType, "system"),
-            eq(modelCapabilityOverride.modelId, modelId)
-          )
-        : and(
-            eq(modelCapabilityOverride.sourceType, "user_connection"),
-            eq(modelCapabilityOverride.connectionId, safeConnectionId as string),
-            eq(modelCapabilityOverride.modelId, modelId)
-          )
-    );
+    const query = db
+      .select()
+      .from(modelCapabilityOverride)
+      .where(
+        sourceType === "system"
+          ? and(
+              eq(modelCapabilityOverride.sourceType, "system"),
+              eq(modelCapabilityOverride.modelId, modelId)
+            )
+          : and(
+              eq(modelCapabilityOverride.sourceType, "user_connection"),
+              eq(
+                modelCapabilityOverride.connectionId,
+                safeConnectionId as string
+              ),
+              eq(modelCapabilityOverride.modelId, modelId)
+            )
+      );
 
     const [capability] = await query.limit(1);
     return capability ?? null;
@@ -1104,7 +1110,10 @@ export async function upsertModelCapabilityOverride({
       const shouldKeepExistingRow =
         providerKey === existing.providerKey &&
         lastErrorSignature === undefined &&
-        modelCapabilityRecordsEqual(mergedCapabilities, existing.capabilitiesJson);
+        modelCapabilityRecordsEqual(
+          mergedCapabilities,
+          existing.capabilitiesJson
+        );
 
       if (shouldKeepExistingRow) {
         return existing;
@@ -1139,7 +1148,7 @@ export async function upsertModelCapabilityOverride({
       .insert(modelCapabilityOverride)
       .values({
         sourceType,
-        connectionId: sourceType === "system" ? null : connectionId ?? null,
+        connectionId: sourceType === "system" ? null : (connectionId ?? null),
         providerKey,
         modelId,
         capabilitiesJson: mergedCapabilities,
@@ -1204,10 +1213,8 @@ export async function clearModelCapabilityOverrideKey({
       return;
     }
 
-    const nextCapabilities: ModelCapabilityRecord = {
-      ...existing.capabilitiesJson,
-    };
-    delete nextCapabilities[capabilityKey];
+    const { [capabilityKey]: _, ...nextCapabilities } =
+      existing.capabilitiesJson;
 
     if (!hasCapabilityData(nextCapabilities)) {
       await db
@@ -1272,10 +1279,7 @@ export async function clearLegacySystemToolCapabilitySeeds({
 
     await Promise.all(
       legacyRows.map(async (row) => {
-        const nextCapabilities: ModelCapabilityRecord = {
-          ...row.capabilitiesJson,
-        };
-        delete nextCapabilities.tools;
+        const { tools: _, ...nextCapabilities } = row.capabilitiesJson;
 
         if (!hasCapabilityData(nextCapabilities)) {
           await db

@@ -3,6 +3,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -11,7 +12,6 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -43,10 +43,7 @@ import {
   type SlashCommandItem,
   useSlashCommand,
 } from "@/hooks/use-slash-command";
-import {
-  chatModels,
-  DEFAULT_CHAT_MODEL,
-} from "@/lib/ai/models";
+import { chatModels, DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { useAppTranslation } from "@/lib/i18n/hooks";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import {
@@ -225,8 +222,10 @@ function PureMultimodalInput({
   }, [adjustHeight]);
 
   useEffect(() => {
-    setIsToolingHintDismissed(false);
-    setIsAttachmentHintDismissed(false);
+    if (selectedModelId) {
+      setIsToolingHintDismissed(false);
+      setIsAttachmentHintDismissed(false);
+    }
   }, [selectedModelId]);
 
   const hasAutoFocused = useRef(false);
@@ -350,7 +349,6 @@ function PureMultimodalInput({
     setAttachments,
     setLocalStorageInput,
     width,
-    chatId,
     resetHeight,
     selectedSlashCommands,
     showAttachmentUnsupportedToast,
@@ -415,7 +413,12 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [isAttachmentUnsupportedForSelectedModel, setAttachments, showAttachmentUnsupportedToast, uploadFile]
+    [
+      isAttachmentUnsupportedForSelectedModel,
+      setAttachments,
+      showAttachmentUnsupportedToast,
+      uploadFile,
+    ]
   );
 
   const handlePaste = useCallback(
@@ -477,7 +480,13 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [isAttachmentUnsupportedForSelectedModel, setAttachments, showAttachmentUnsupportedToast, uploadFile, t]
+    [
+      isAttachmentUnsupportedForSelectedModel,
+      setAttachments,
+      showAttachmentUnsupportedToast,
+      uploadFile,
+      t,
+    ]
   );
 
   // Add paste event listener to textarea
@@ -523,7 +532,10 @@ function PureMultimodalInput({
           ) {
             return;
           }
-          if (attachments.length > 0 && isAttachmentUnsupportedForSelectedModel) {
+          if (
+            attachments.length > 0 &&
+            isAttachmentUnsupportedForSelectedModel
+          ) {
             showAttachmentUnsupportedToast();
             return;
           }
@@ -625,11 +637,11 @@ function PureMultimodalInput({
           {isAttachmentUnsupportedForSelectedModel &&
             !isAttachmentHintDismissed && (
               <motion.div
-                initial={{ height: 0, opacity: 0, y: 5 }}
                 animate={{ height: "auto", opacity: 1, y: 0 }}
-                exit={{ height: 0, opacity: 0, y: 5 }}
-                transition={{ type: "spring", damping: 20, stiffness: 300 }}
                 className="overflow-hidden"
+                exit={{ height: 0, opacity: 0, y: 5 }}
+                initial={{ height: 0, opacity: 0, y: 5 }}
+                transition={{ type: "spring", damping: 20, stiffness: 300 }}
               >
                 <div className="mx-2 mb-2 flex items-center justify-between gap-3 rounded-xl border border-blue-500/15 bg-linear-to-r from-blue-500/10 to-transparent px-3 py-2 text-xs backdrop-blur-md dark:border-blue-400/20 dark:from-blue-400/15 dark:to-transparent">
                   <div className="flex items-center gap-2.5 text-blue-600 dark:text-blue-400">
@@ -640,17 +652,17 @@ function PureMultimodalInput({
                   </div>
                   <div className="flex items-center gap-1">
                     <button
-                      type="button"
-                      onClick={() => setIsModelSelectorOpen(true)}
                       className="rounded-md px-2 py-1 font-semibold text-blue-600 transition-colors hover:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-400/20"
+                      onClick={() => setIsModelSelectorOpen(true)}
+                      type="button"
                     >
                       切换
                     </button>
                     <button
-                      type="button"
-                      onClick={() => setIsAttachmentHintDismissed(true)}
-                      className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       aria-label="Dismiss hint"
+                      className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      onClick={() => setIsAttachmentHintDismissed(true)}
+                      type="button"
                     >
                       <XIcon className="size-3.5" />
                     </button>
@@ -663,11 +675,11 @@ function PureMultimodalInput({
         <AnimatePresence>
           {isToolingUnsupportedForSelectedModel && !isToolingHintDismissed && (
             <motion.div
-              initial={{ height: 0, opacity: 0, y: 5 }}
               animate={{ height: "auto", opacity: 1, y: 0 }}
-              exit={{ height: 0, opacity: 0, y: 5 }}
-              transition={{ type: "spring", damping: 20, stiffness: 300 }}
               className="overflow-hidden"
+              exit={{ height: 0, opacity: 0, y: 5 }}
+              initial={{ height: 0, opacity: 0, y: 5 }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
             >
               <div className="mx-2 mb-2 flex items-center justify-between gap-3 rounded-xl border border-blue-500/15 bg-linear-to-r from-blue-500/10 to-transparent px-3 py-2 text-xs backdrop-blur-md dark:border-blue-400/20 dark:from-blue-400/15 dark:to-transparent">
                 <div className="flex items-center gap-2.5 text-blue-600 dark:text-blue-400">
@@ -678,17 +690,17 @@ function PureMultimodalInput({
                 </div>
                 <div className="flex items-center gap-1">
                   <button
-                    type="button"
-                    onClick={() => setIsModelSelectorOpen(true)}
                     className="rounded-md px-2 py-1 font-semibold text-blue-600 transition-colors hover:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-400/20"
+                    onClick={() => setIsModelSelectorOpen(true)}
+                    type="button"
                   >
                     切换
                   </button>
                   <button
-                    type="button"
-                    onClick={() => setIsToolingHintDismissed(true)}
-                    className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     aria-label="Dismiss hint"
+                    className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    onClick={() => setIsToolingHintDismissed(true)}
+                    type="button"
                   >
                     <XIcon className="size-3.5" />
                   </button>
@@ -707,9 +719,9 @@ function PureMultimodalInput({
             />
             <ModelSelectorCompact
               onModelChange={onModelChange}
-              selectedModelId={selectedModelId}
-              open={isModelSelectorOpen}
               onOpenChange={setIsModelSelectorOpen}
+              open={isModelSelectorOpen}
+              selectedModelId={selectedModelId}
             />
           </PromptInputTools>
 

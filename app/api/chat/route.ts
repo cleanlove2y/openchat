@@ -53,17 +53,17 @@ import {
   deleteChatById,
   deleteMessagesByChatIdAfterTimestamp,
   getChatById,
-  getModelCapabilityOverride,
   getMessageById,
   getMessageCountByUserId,
   getMessagesByChatId,
+  getModelCapabilityOverride,
   getUserLlmConnectionById,
   saveChat,
   saveMessages,
   touchUserLlmConnectionLastUsed,
-  upsertModelCapabilityOverride,
   updateChatTitleById,
   updateMessage,
+  upsertModelCapabilityOverride,
 } from "@/lib/db/queries";
 import type { DBMessage } from "@/lib/db/schema";
 import { OpenChatError } from "@/lib/errors";
@@ -302,10 +302,12 @@ const postHandler = async ({
 
   // Collect skill ids from skill_ref parts in the current message.
   const latestMessageParts =
-    message?.parts ?? (Array.isArray(messages) && messages.length > 0
-      ? messages[messages.length - 1]?.parts
+    message?.parts ??
+    (Array.isArray(messages) && messages.length > 0
+      ? messages.at(-1)?.parts
       : undefined);
-  const requestedSkillIds: string[] = collectSkillRefsFromParts(latestMessageParts);
+  const requestedSkillIds: string[] =
+    collectSkillRefsFromParts(latestMessageParts);
 
   const { longitude, latitude, city, country } = geolocation(request);
 
@@ -352,7 +354,9 @@ const postHandler = async ({
     providerKey: string;
     modelId: string;
   } = {
-    sourceType: selectedUserConnection ? "user_connection" : ("system" as const),
+    sourceType: selectedUserConnection
+      ? "user_connection"
+      : ("system" as const),
     connectionId: selectedUserConnection?.id ?? null,
     providerKey: selectedUserConnection
       ? normalizeConnectionProvider({
@@ -384,7 +388,8 @@ const postHandler = async ({
     knownCapabilityOverride?.capabilitiesJson.tools?.status ?? "unknown";
 
   if (!isUserConnectionModel && ENABLE_MODEL_TOOL_CAPABILITY_GATING) {
-    const existingToolSource = knownCapabilityOverride?.capabilitiesJson.tools?.source;
+    const existingToolSource =
+      knownCapabilityOverride?.capabilitiesJson.tools?.source;
 
     if (isLegacyTagBasedToolCapabilitySource(existingToolSource)) {
       await clearModelCapabilityOverrideKey({
@@ -414,9 +419,10 @@ const postHandler = async ({
     });
 
     if (shouldRefreshToolCapability) {
-      const endpointToolStatus = await fetchSystemModelToolCapabilityFromEndpoints(
-        capabilityTarget.modelId
-      );
+      const endpointToolStatus =
+        await fetchSystemModelToolCapabilityFromEndpoints(
+          capabilityTarget.modelId
+        );
       const endpointCapabilityRecord =
         buildEndpointToolCapabilityRecord(endpointToolStatus);
 
@@ -471,7 +477,8 @@ const postHandler = async ({
 
   if (
     hasAttachmentInput &&
-    knownCapabilityOverride?.capabilitiesJson.attachments?.status === "unsupported"
+    knownCapabilityOverride?.capabilitiesJson.attachments?.status ===
+      "unsupported"
   ) {
     return new OpenChatError("bad_request:attachment").toResponse();
   }
@@ -541,7 +548,10 @@ const postHandler = async ({
   );
   const skillToolingEnabled =
     isSkillToolingAllowedForCurrentModel &&
-    shouldEnableSkillTooling(skillsConfig.enabled, skillsSnapshot.skills.length);
+    shouldEnableSkillTooling(
+      skillsConfig.enabled,
+      skillsSnapshot.skills.length
+    );
   const explicitlyLoadedSkills: Array<{ name: string; content: string }> = [];
   const missingExplicitSkillNames: string[] = [];
 
@@ -646,18 +656,16 @@ const postHandler = async ({
     activeTools.push("loadSkill");
   }
 
-  let streamWriter:
-    | {
-        write: (part: {
-          type: "data-model-capabilities-refresh";
-          data: {
-            capability: "attachments";
-            modelId: string;
-            status: "unsupported";
-          };
-        }) => void;
-      }
-    | null = null;
+  let streamWriter: {
+    write: (part: {
+      type: "data-model-capabilities-refresh";
+      data: {
+        capability: "attachments";
+        modelId: string;
+        status: "unsupported";
+      };
+    }) => void;
+  } | null = null;
   let didQueueCapabilityRefresh = false;
 
   const markAttachmentsUnsupported = async ({
@@ -831,7 +839,7 @@ const postHandler = async ({
       const errorSignature = getAttachmentUnsupportedErrorSignature(error);
 
       if (errorSignature && hasAttachmentInput) {
-        void markAttachmentsUnsupported({ error, persistOnly: false }).catch(
+        markAttachmentsUnsupported({ error, persistOnly: false }).catch(
           (persistError) => {
             appLogger.error(
               {

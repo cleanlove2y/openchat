@@ -1,6 +1,6 @@
 import type {
-  ModelCapabilitySource,
   ModelCapabilityRecord,
+  ModelCapabilitySource,
   ModelCapabilityStatus,
 } from "@/lib/user-llm";
 

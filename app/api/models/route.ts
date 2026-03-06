@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  buildModelListSeedCapabilitiesFromTags,
-} from "@/lib/ai/model-capabilities/vercel";
+import { buildModelListSeedCapabilitiesFromTags } from "@/lib/ai/model-capabilities/vercel";
 import { chatModels } from "@/lib/ai/models";
 import {
   clearLegacySystemToolCapabilitySeeds,
@@ -11,18 +9,18 @@ import {
   upsertModelCapabilityOverride,
 } from "@/lib/db/queries";
 import type { ModelCapabilityOverride as ModelCapabilityOverrideRow } from "@/lib/db/schema";
+import { getAppLogger } from "@/lib/logging";
 import { auth } from "@/lib/server/auth/core";
 import {
   encodeUserConnectionModelId,
   getProviderDisplayName,
   type ModelCapabilityKey,
   type ModelCapabilityRecord,
-  type UserFacingModelCapabilities,
   normalizeConnectionProvider,
   type OpenAICompatibleModel,
   type UserFacingChatModel,
+  type UserFacingModelCapabilities,
 } from "@/lib/user-llm";
-import { getAppLogger } from "@/lib/logging";
 
 type SystemModelFetchResult = {
   models: UserFacingChatModel[];
@@ -340,7 +338,9 @@ export async function GET() {
         modelId: model.id,
       })),
     })
-      .then((overrides) => attachCapabilitiesFromOverrides(systemModels, overrides))
+      .then((overrides) =>
+        attachCapabilitiesFromOverrides(systemModels, overrides)
+      )
       .catch((error) => {
         appLogger.warn(
           {
@@ -370,7 +370,9 @@ export async function GET() {
       modelId: model.realId ?? model.id,
     })),
   })
-    .then((overrides) => attachCapabilitiesFromOverrides(combinedModels, overrides))
+    .then((overrides) =>
+      attachCapabilitiesFromOverrides(combinedModels, overrides)
+    )
     .catch((error) => {
       appLogger.warn(
         {

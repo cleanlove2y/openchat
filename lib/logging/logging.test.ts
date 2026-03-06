@@ -59,9 +59,9 @@ test("withRouteLogging writes app logs and attaches x-request-id", async () => {
         route: "/api/test",
         method: "POST",
       },
-      async () => {
+      () => {
         setRequestActor({ userId: "user-1", userType: "regular" });
-        return Response.json({ ok: true }, { status: 201 });
+        return Promise.resolve(Response.json({ ok: true }, { status: 201 }));
       }
     );
 
@@ -108,9 +108,9 @@ test("withRouteLogging writes success audit logs for mutating endpoints", async 
             new URL(request.url).searchParams.get("id") ?? undefined,
         },
       },
-      async () => {
+      () => {
         setRequestActor({ userId: "user-2", userType: "regular" });
-        return new Response(null, { status: 200 });
+        return Promise.resolve(new Response(null, { status: 200 }));
       }
     );
 
@@ -151,8 +151,10 @@ test("withRouteLogging writes failed audit logs for rejected requests", async ()
           resourceType: "document",
         },
       },
-      async () => {
-        return Response.json({ code: "forbidden:document" }, { status: 403 });
+      () => {
+        return Promise.resolve(
+          Response.json({ code: "forbidden:document" }, { status: 403 })
+        );
       }
     );
 
@@ -266,7 +268,9 @@ test("withRouteLogging does not fail when logger rotates mid-request", async () 
   const secondLogDir = await mkdtemp(join(tmpdir(), "openchat-rotate-new-"));
   configureLoggingForTests({ logDir: firstLogDir });
 
-  let releaseHandler = () => {};
+  let releaseHandler = () => {
+    // no-op
+  };
   const handlerReady = new Promise<void>((resolve) => {
     releaseHandler = () => {
       resolve();

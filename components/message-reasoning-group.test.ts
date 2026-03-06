@@ -9,9 +9,11 @@ type ReasoningPart = {
 
 test("collectMessageReasoning groups reasoning parts into one ordered payload", async () => {
   let collectMessageReasoning:
-    | ((
-        parts: ReasoningPart[]
-      ) => { segments: string[]; isStreaming: boolean; hasReasoning: boolean })
+    | ((parts: ReasoningPart[]) => {
+        segments: string[];
+        isStreaming: boolean;
+        hasReasoning: boolean;
+      })
     | undefined;
 
   try {
@@ -42,9 +44,11 @@ test("collectMessageReasoning groups reasoning parts into one ordered payload", 
 
 test("collectMessageReasoning reports no reasoning when parts are empty or blank", async () => {
   let collectMessageReasoning:
-    | ((
-        parts: ReasoningPart[]
-      ) => { segments: string[]; isStreaming: boolean; hasReasoning: boolean })
+    | ((parts: ReasoningPart[]) => {
+        segments: string[];
+        isStreaming: boolean;
+        hasReasoning: boolean;
+      })
     | undefined;
 
   try {

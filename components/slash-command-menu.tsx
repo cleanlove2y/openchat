@@ -109,8 +109,10 @@ export function SlashCommandMenu({
                   <WrenchIcon className="size-4 text-foreground/70" />
                 </div>
                 <div className="flex flex-col items-start flex-1 min-w-0 text-left overflow-hidden">
-                  <span className="font-medium truncate w-full block">{cmd.title}</span>
-                  <span 
+                  <span className="font-medium truncate w-full block">
+                    {cmd.title}
+                  </span>
+                  <span
                     className="text-xs text-muted-foreground truncate w-full mt-0.5 block"
                     title={cmd.description}
                   >

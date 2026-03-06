@@ -14,7 +14,10 @@ type SuggestedActionsProps = {
   selectedVisibilityType: VisibilityType;
 };
 
-function PureSuggestedActions({ chatId: _chatId, sendMessage }: SuggestedActionsProps) {
+function PureSuggestedActions({
+  chatId: _chatId,
+  sendMessage,
+}: SuggestedActionsProps) {
   const { t } = useAppTranslation("chat");
 
   const suggestedActions = [

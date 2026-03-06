@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  MarkdownParser,
   defaultMarkdownParser,
   defaultMarkdownSerializer,
+  MarkdownParser,
 } from "prosemirror-markdown";
 import type { Node } from "prosemirror-model";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
