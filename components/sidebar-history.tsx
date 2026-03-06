@@ -228,7 +228,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
 
   return (
     <>
-      <SidebarGroup className="px-2 pt-6 pb-1 group-data-[collapsible=icon]:hidden">
+      <SidebarGroup className="px-2 pt-0 pb-1 group-data-[collapsible=icon]:hidden">
         <SidebarGroupContent>
           <div className={historyTitleClassName}>{t("history.title")}</div>
           <SidebarMenu>
@@ -243,7 +243,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                 return (
                   <div className="flex flex-col gap-7">
                     {groupedChats.today.length > 0 && (
-                      <div>
+                      <div className="flex flex-col gap-0.5">
                         <div className={historyGroupLabelClassName}>
                           {t("history.group.today")}
                         </div>
@@ -264,7 +264,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                     )}
 
                     {groupedChats.yesterday.length > 0 && (
-                      <div>
+                      <div className="flex flex-col gap-0.5">
                         <div className={historyGroupLabelClassName}>
                           {t("history.group.yesterday")}
                         </div>
@@ -285,7 +285,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                     )}
 
                     {groupedChats.lastWeek.length > 0 && (
-                      <div>
+                      <div className="flex flex-col gap-0.5">
                         <div className={historyGroupLabelClassName}>
                           {t("history.group.last7Days")}
                         </div>
@@ -306,7 +306,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                     )}
 
                     {groupedChats.lastMonth.length > 0 && (
-                      <div>
+                      <div className="flex flex-col gap-0.5">
                         <div className={historyGroupLabelClassName}>
                           {t("history.group.last30Days")}
                         </div>
@@ -327,7 +327,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                     )}
 
                     {groupedChats.older.length > 0 && (
-                      <div>
+                      <div className="flex flex-col gap-0.5">
                         <div className={historyGroupLabelClassName}>
                           {t("history.group.olderThanLastMonth")}
                         </div>

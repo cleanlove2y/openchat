@@ -51,38 +51,47 @@ export function AppSidebar({ user }: { user: User | undefined }) {
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup className="px-2 pt-2 pb-1">
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {primaryRoutes.map((route) => (
-                <SidebarMenuItem key={route.href}>
-                  <SidebarMenuButton
-                    className="h-9 rounded-lg px-3 font-medium"
-                    isActive={route.isActive}
-                    onClick={() => {
-                      setOpenMobile(false);
-                      router.push(route.href);
+      <SidebarGroup className="px-2 pt-2 pb-0">
+        <SidebarGroupContent>
+          <SidebarMenu className="gap-1">
+            {primaryRoutes.map((route) => (
+              <SidebarMenuItem key={route.href}>
+                <SidebarMenuButton
+                  className="h-9 rounded-lg px-3 font-medium"
+                  isActive={route.isActive}
+                  onClick={() => {
+                    setOpenMobile(false);
+                    router.push(route.href);
 
-                      if (route.shouldRefresh) {
-                        router.refresh();
-                      }
-                    }}
-                    size="default"
-                    tooltip={route.label}
-                    type="button"
-                    variant="default"
-                  >
-                    <SquarePen className="size-4" />
-                    <span>{route.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarHistory user={user} />
-      </SidebarContent>
+                    if (route.shouldRefresh) {
+                      router.refresh();
+                    }
+                  }}
+                  size="default"
+                  tooltip={route.label}
+                  type="button"
+                  variant="default"
+                >
+                  <SquarePen className="size-4" />
+                  <span>{route.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <div className="relative flex min-h-0 flex-1 flex-col mt-2 mb-4">
+        {/* Subtle Top Glassmorphism Vanishing Effect */}
+        <div className="pointer-events-none absolute top-0 left-0 right-0 h-10 bg-sidebar/50 backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_0%,transparent_100%)] z-10" />
+
+        <SidebarContent className="pb-24 pt-6">
+          <SidebarHistory user={user} />
+        </SidebarContent>
+
+        {/* Subtle Bottom Glassmorphism Vanishing Effect */}
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-sidebar/50 backdrop-blur-md [mask-image:linear-gradient(to_bottom,transparent_0%,black_100%)] z-10" />
+      </div>
 
       <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
     </Sidebar>
